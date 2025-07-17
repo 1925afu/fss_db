@@ -1,0 +1,25 @@
+# 핵심 웹 프레임워크
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# 데이터베이스 (PostgreSQL 대신 SQLite로 시작)
+sqlalchemy
+alembic
+
+# AI 및 NL2SQL
+langchain
+langchain-google-genai
+google-generativeai
+
+# 웹 크롤링 및 PDF 처리
+requests
+beautifulsoup4
+PyPDF2
+
+# 기본 유틸리티
+python-dotenv
+python-multipart
+httpx
+aiofiles

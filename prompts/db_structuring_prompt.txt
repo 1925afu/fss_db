@@ -1,0 +1,132 @@
+**Role:** 당신은 DB 스키마 설계 전문가이다. 입력된 분석 결과(JSON)를 바탕으로, 아래에 정의된 최종 DB 스키마에 맞춰 데이터를 변환해야 한다.
+
+**Context (DB Schema):**
+**Decisions 테이블 (복합 Primary Key):**
+- decision_year (Integer, Primary Key): 의결 연도
+- decision_id (Integer, Primary Key): 연도 내 의결 번호
+- decision_month (Integer): 의결 월
+- decision_day (Integer): 의결 일
+- agenda_no (String): 의안번호 (예: "제101호")
+- title (Text): 의안명
+- category_1 (String): 대분류 ("제재", "인허가", "정책")
+- category_2 (String): 중분류 ("기관", "임직원", "전문가" 등)
+- stated_purpose (Text): 제안이유
+
+**Actions 테이블 (복합 Foreign Key):**
+- action_id (Auto-increment Primary Key)
+- decision_year (Integer, FK): 참조하는 의결 연도
+- decision_id (Integer, FK): 참조하는 의결 번호
+- entity_name (String): 대상 기관/개인명
+- industry_sector (String): 업권 분류
+- violation_details (Text): 위반 내용
+- action_type (String): 조치 유형
+- fine_amount (BigInteger): 과태료/과징금액
+
+**Laws 테이블:**
+- law_name (String): 법률 정식명칭
+- law_short_name (String): 법률 약칭
+- law_category (String): 법률 분류
+
+**Instructions:**
+1. **문서 전체 내용을 기반으로 `decision` 객체를 생성하라:**
+   - **decision_year**: 의결일자에서 연도 추출 (예: 2025)
+   - **decision_id**: 파일명에서 의결번호 추출 (예: "의결123."이면 123)
+   - **decision_month, decision_day**: 의결일자에서 월/일 추출
+   - **agenda_no**: 의안번호 (예: "제101호")
+   - **title, category_1, category_2, stated_purpose**: 의결서 메타정보
+
+2. 입력된 JSON의 `action_groups` 배열을 순회하라.
+3. 각 그룹의 `violators` 배열을 다시 순회하면서, **개별 위반자 한 명당 하나의 `actions` 객체**를 생성하라.
+4. **각 actions 객체에는 반드시 decision_year, decision_id를 포함**하여 복합 Foreign Key를 구성하라.
+5. 그룹의 공통 정보(`violation_type`, `violation_details` 등)를 각 `actions` 객체에 올바르게 복사해 넣어라.
+6. 최종 결과물을 설계 명세서에 정의된 최종 JSON 포맷으로 출력하라.
+
+**Example Input (JSON from Step 1):**
+```json
+{
+  "analysis_summary": "총 2개의 위반 그룹, 4개의 위반 주체 식별됨.",
+  "action_groups": [
+    {
+      "group_description": "회사 내부 관계자의 회계처리기준 위반",
+      "violators": [
+        {"entity_name": "(주)오리엔트바이오 대표이사 ☆☆☆", "role": "대표이사"},
+        {"entity_name": "(주)오리엔트바이오 前 재무담당임원 ★★★", "role": "前 재무담당임원"},
+        {"entity_name": "(주)오리엔트바이오 감사 ◇◇◇", "role": "감사"}
+      ],
+      "violation_type": "회계처리기준 위반",
+      "violation_details": "매출 과대계상, 영장류 매출 총액 인식, 실험동물 매출 인식시점 오류",
+      "action_type": "과징금",
+      "action_details": "각 8,500,000원 부과"
+    },
+    {
+      "group_description": "외부 감사인의 회계감사기준 위반",
+      "violators": [
+        {"entity_name": "◎◎회계법인", "role": "감사인"}
+      ],
+      "violation_type": "회계감사기준 위반",
+      "violation_details": "매출 및 관련계정 감사절차 소홀, 회계처리기준 위반사항을 감사의견에 미반영",
+      "action_type": "과징금",
+      "action_details": "82,000,000원 부과"
+    }
+  ]
+}
+```
+
+**Example Output (Final JSON for DB):**
+```json
+{
+  "decision": {
+    "decision_year": 2025,
+    "decision_id": 1,
+    "decision_month": 2,
+    "decision_day": 19,
+    "agenda_no": "제1호",
+    "title": "(주)오리엔트바이오의 사업보고서 및 연결감사보고서 등에 대한 조사·감리결과 과징금 부과안",
+    "category_1": "제재",
+    "category_2": "기관",
+    "stated_purpose": "(주)오리엔트바이오의 사업보고서 관련 회계처리기준 및 회계감사기준 위반에 대한 과징금 부과"
+  },
+  "actions": [
+    {
+      "decision_year": 2025,
+      "decision_id": 1,
+      "entity_name": "(주)오리엔트바이오 대표이사 ☆☆☆",
+      "industry_sector": "기타",
+      "violation_details": "회계처리기준 위반: 매출 과대계상, 영장류 매출 총액 인식, 실험동물 매출 인식시점 오류",
+      "action_type": "과징금",
+      "fine_amount": 8500000,
+      "laws_cited": [{"law_short_name": "외부감사법", "article_details": "제35조 제1항"}]
+    },
+    {
+      "decision_year": 2025,
+      "decision_id": 1,
+      "entity_name": "(주)오리엔트바이오 前 재무담당임원 ★★★",
+      "industry_sector": "기타",
+      "violation_details": "회계처리기준 위반: 매출 과대계상, 영장류 매출 총액 인식, 실험동물 매출 인식시점 오류",
+      "action_type": "과징금",
+      "fine_amount": 8500000,
+      "laws_cited": [{"law_short_name": "외부감사법", "article_details": "제35조 제1항"}]
+    },
+    {
+      "decision_year": 2025,
+      "decision_id": 1,
+      "entity_name": "(주)오리엔트바이오 감사 ◇◇◇",
+      "industry_sector": "기타",
+      "violation_details": "회계처리기준 위반: 매출 과대계상, 영장류 매출 총액 인식, 실험동물 매출 인식시점 오류",
+      "action_type": "과징금",
+      "fine_amount": 8500000,
+      "laws_cited": [{"law_short_name": "외부감사법", "article_details": "제35조 제1항"}]
+    },
+    {
+      "decision_year": 2025,
+      "decision_id": 1,
+      "entity_name": "◎◎회계법인",
+      "industry_sector": "회계/감사",
+      "violation_details": "회계감사기준 위반: 매출 및 관련계정 감사절차 소홀, 회계처리기준 위반사항을 감사의견에 미반영",
+      "action_type": "과징금",
+      "fine_amount": 82000000,
+      "laws_cited": [{"law_short_name": "외부감사법", "article_details": "제35조 제2항"}]
+    }
+  ]
+}
+```

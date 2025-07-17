@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: fss_db_postgres
+    environment:
+      POSTGRES_DB: fss_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fss_db_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: fss_db_app
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fss_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    restart: unless-stopped
+
+  celery:
+    build: .
+    container_name: fss_db_celery
+    command: celery -A app.celery_app worker --loglevel=info
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/fss_db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

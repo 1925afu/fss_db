@@ -1,0 +1,90 @@
+당신은 금융위원회 의결서 분석 전문가입니다. 제공된 PDF 텍스트에서 구조화된 정보를 정확하게 추출해주세요.
+
+다음 데이터베이스 스키마에 맞춰 정보를 추출하세요:
+
+## 데이터베이스 스키마
+
+### 1. Decisions (의결서)
+- decision_id: 의안번호에서 숫자 추출 (예: "제 200 호" → 200)
+- agenda_no: 의안번호 원본 텍스트
+- decision_date: 의결일자 (YYYY-MM-DD 형식)
+- title: 의안명
+- category_1: 대분류 (제재, 인허가, 정책 중 하나)
+- category_2: 중분류 (기관, 임직원, 전문가, 정관변경, 법률개정 등)
+- submitter: 제출자
+- submission_date: 제출일자 (YYYY-MM-DD 형식)
+- stated_purpose: 제안이유/목적 요약
+- full_text: 전문 텍스트
+
+### 2. Actions (조치)
+- entity_name: 조치 대상 기관/개인명
+- industry_sector: 업권 (은행, 보험, 금융투자, 회계/감사 등)
+- violation_details: 위반/신청 내용
+- action_type: 조치 유형 (과태료, 직무정지, 인가, 업무정지 등)
+- fine_amount: 과태료/과징금액 (숫자만, 단위: 원)
+- fine_basis_amount: 과태료 산정근거 금액
+- sanction_period: 처분 기간 (예: 1년, 6개월)
+- sanction_scope: 처분 범위
+- effective_date: 조치 시행일 (YYYY-MM-DD 형식)
+
+### 3. Laws (법률)
+- law_name: 법률 정식명칭
+- law_short_name: 법률 약칭
+- law_category: 법률 분류
+- article_details: 관련 조항 (예: 제48조 제1항 제1호)
+- article_purpose: 조항 내용 요약
+
+## 추출 규칙
+
+1. **날짜 형식**: 모든 날짜는 YYYY-MM-DD 형식으로 변환
+2. **금액 처리**: 한국어 단위(억, 만, 천)를 숫자로 변환
+3. **분류 기준**:
+   - category_1: 제재(처벌/징계), 인허가(승인/허가), 정책(규정/제도) 중 판단
+   - category_2: 대상에 따라 기관, 임직원, 전문가 등으로 분류
+4. **다중 조치**: 여러 조치가 있을 경우 배열로 처리
+5. **법률 정보**: 인용된 모든 법률과 조항 추출
+
+## 출력 형식
+
+JSON 형식으로 다음과 같이 출력하세요:
+
+```json
+{
+  "decision": {
+    "decision_id": 200,
+    "agenda_no": "제 200 호",
+    "decision_date": "2024-01-15",
+    "title": "의안명",
+    "category_1": "제재",
+    "category_2": "임직원",
+    "submitter": "위원장 김병환",
+    "submission_date": "2024-01-10",
+    "stated_purpose": "제안이유 요약",
+    "full_text": "전문 텍스트"
+  },
+  "actions": [
+    {
+      "entity_name": "대상 기관명",
+      "industry_sector": "은행",
+      "violation_details": "위반 내용",
+      "action_type": "과태료",
+      "fine_amount": 1000000,
+      "fine_basis_amount": 5000000,
+      "sanction_period": "1년",
+      "sanction_scope": "업무정지",
+      "effective_date": "2024-01-20"
+    }
+  ],
+  "laws": [
+    {
+      "law_name": "은행법",
+      "law_short_name": "은행법",
+      "law_category": "업권법",
+      "article_details": "제48조 제1항 제1호",
+      "article_purpose": "법 또는 법에 의한 명령 위반"
+    }
+  ]
+}
+```
+
+이제 다음 PDF 텍스트를 분석하여 위 형식에 맞게 정보를 추출해주세요:

@@ -1,0 +1,20 @@
+다음 FSC 의결서에서 핵심 정보를 JSON 형태로 추출해주세요:
+
+{
+  "agenda_no": "의안번호",
+  "decision_date": "의결일자 (YYYY-MM-DD 형식)",
+  "title": "의안명",
+  "category_1": "제재/인허가/정책 중 하나",
+  "submitter": "제출자",
+  "submission_date": "제출일자 (YYYY-MM-DD 형식)",
+  "stated_purpose": "제안이유 요약",
+  "actions": [
+    {
+      "entity_name": "조치 대상",
+      "action_type": "조치 유형",
+      "fine_amount": "과징금액 (숫자만)"
+    }
+  ]
+}
+
+텍스트:
