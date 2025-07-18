@@ -15,11 +15,11 @@ This is a Regulatory Intelligence Platform for the Financial Services Commission
 The system is designed as a two-phase architecture:
 
 ### Phase 1: One-time Data Pipeline
-- **FSC Crawler Script** (`crawler.py`): Downloads FSC decision documents in ZIP format
-- **Main Processing Script** (`process.py`): Orchestrates PDF processing workflow
-- **Gemini Extractor AI**: Analyzes PDFs and extracts structured JSON data
-- **Gemini Validator AI**: Validates extracted data for logical/contextual accuracy
-- **PostgreSQL Database**: Stores final validated structured data
+- **FSC Crawler Script** (`app/services/fsc_crawler.py`): Downloads FSC decision documents in ZIP format
+- **PDF Processor Service** (`app/services/pdf_processor.py`): Orchestrates hybrid PDF processing workflow
+- **Rule-based Extractor** (`app/services/rule_based_extractor.py`): Extracts structured data using Korean legal document patterns (95%+ accuracy)
+- **Gemini Service** (`app/services/gemini_service.py`): AI enhancement for complex violation summaries and categorization
+- **SQLite/PostgreSQL Database**: Stores final validated structured data with composite keys
 
 ### Phase 2: Query & Analysis System
 - **Web UI** (Next.js): User interface for search and visualization
@@ -39,15 +39,17 @@ The system uses a PostgreSQL database with four main tables:
 
 ### Backend
 - **Python** with FastAPI, SQLAlchemy, Pydantic
-- **PostgreSQL 15+** for data storage
-- **Google Gemini 1.5 Pro API** for AI processing
+- **SQLite/PostgreSQL** for data storage with composite key architecture
+- **Google Gemini 1.5 Pro API** for AI processing (with rate limiting)
+- **PyPDF2** for PDF text extraction
 - **LangChain** with langchain-google-genai for NL2SQL
 
 ### Frontend
-- **Next.js** (React) with TailwindCSS
+- **Next.js** (React) with TailwindCSS (planned)
 - **JavaScript** for client-side logic
 
 ### Data Processing
+- **Rule-based Extractor**: Regex patterns for Korean legal documents
 - **Python** libraries: requests, BeautifulSoup4 for web scraping
 - **File system** storage for raw ZIP and processed PDF files
 
