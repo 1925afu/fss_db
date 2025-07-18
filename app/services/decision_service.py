@@ -25,11 +25,25 @@ class DecisionService:
             if "category_2" in filters:
                 query = query.filter(Decision.category_2 == filters["category_2"])
             if "start_date" in filters:
-                query = query.filter(Decision.decision_date >= filters["start_date"])
+                start_date = filters["start_date"]
+                query = query.filter(
+                    (Decision.decision_year > start_date.year) |
+                    ((Decision.decision_year == start_date.year) & (Decision.decision_month > start_date.month)) |
+                    ((Decision.decision_year == start_date.year) & (Decision.decision_month == start_date.month) & (Decision.decision_day >= start_date.day))
+                )
             if "end_date" in filters:
-                query = query.filter(Decision.decision_date <= filters["end_date"])
+                end_date = filters["end_date"]
+                query = query.filter(
+                    (Decision.decision_year < end_date.year) |
+                    ((Decision.decision_year == end_date.year) & (Decision.decision_month < end_date.month)) |
+                    ((Decision.decision_year == end_date.year) & (Decision.decision_month == end_date.month) & (Decision.decision_day <= end_date.day))
+                )
         
-        return query.order_by(Decision.decision_date.desc()).offset(skip).limit(limit).all()
+        return query.order_by(
+            Decision.decision_year.desc(), 
+            Decision.decision_month.desc(), 
+            Decision.decision_day.desc()
+        ).offset(skip).limit(limit).all()
     
     def get_decision_by_id(self, decision_id: int) -> Optional[Decision]:
         """ID로 의결서를 조회합니다."""
@@ -65,18 +79,18 @@ class DecisionService:
         # 연도별 통계
         yearly_stats = (
             self.db.query(
-                func.strftime('%Y', Decision.decision_date).label('year'),
+                Decision.decision_year.label('year'),
                 func.count(Decision.decision_id).label('count')
             )
-            .group_by(func.strftime('%Y', Decision.decision_date))
-            .order_by('year')
+            .group_by(Decision.decision_year)
+            .order_by(Decision.decision_year)
             .all()
         )
         
         return {
             "category_1": [{"category": item[0], "count": item[1]} for item in category_1_stats],
             "category_2": [{"category_1": item[0], "category_2": item[1], "count": item[2]} for item in category_2_stats],
-            "yearly": [{"year": int(item[0]), "count": item[1]} for item in yearly_stats if item[0]]
+            "yearly": [{"year": item[0], "count": item[1]} for item in yearly_stats]
         }
     
     def create_decision(self, decision_data: Dict[str, Any]) -> Decision:

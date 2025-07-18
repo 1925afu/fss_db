@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # 로깅 설정
     LOG_LEVEL: str = "INFO"
     
+    # Redis 설정
+    REDIS_URL: str = "redis://localhost:6379/0"
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

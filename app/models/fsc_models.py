@@ -69,6 +69,11 @@ class Action(Base):
     sanction_scope = Column(Text)  # 처분 범위
     effective_date = Column(Date)  # 조치 시행일
     
+    # 하이브리드 추출을 위한 새로운 컬럼들
+    violation_full_text = Column(Text)  # 조치 이유 전문 (가. 지적사항 섹션)
+    violation_summary = Column(Text)    # AI 요약된 위반 내용
+    target_details = Column(JSON)       # 조치대상자 세부 정보 (JSON 형태)
+    
     # 추가 메타데이터
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

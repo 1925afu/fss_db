@@ -3,18 +3,28 @@ from typing import Dict, Any, Optional
 from app.core.config import settings
 import json
 import logging
+import asyncio
+import time
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
 
 class GeminiService:
-    """Google Gemini API 서비스"""
+    """Google Gemini API 서비스 (Rate Limiting 지원)"""
     
     def __init__(self):
         genai.configure(api_key=settings.GOOGLE_API_KEY)
         self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
         self.prompt_dir = settings.PROMPT_DIR
         self._load_prompts()
+        
+        # Rate limiting 설정 (Free tier: 분당 10회)
+        self.rate_limit_requests_per_minute = 10
+        self.rate_limit_window = 60  # 초
+        self.request_timestamps = []
+        self.max_retries = 5
+        self.base_delay = 6  # 초 (60초 / 10회 = 6초)
     
     def _load_prompts(self):
         """프롬프트 파일들을 로드합니다."""
@@ -44,6 +54,63 @@ class GeminiService:
             self.nl2sql_prompt = "자연어 질문을 SQL 쿼리로 변환해주세요."
             self.analyzer_prompt = "문서의 구조를 분석하고 위반 사항을 논리적 그룹으로 묶어주세요."
             self.db_structuring_prompt = "분석된 데이터를 DB 스키마에 맞게 변환해주세요."
+    
+    def _check_rate_limit(self) -> float:
+        """Rate limit을 확인하고 필요한 대기 시간을 반환합니다."""
+        now = time.time()
+        
+        # 1분 이전의 요청들 제거
+        self.request_timestamps = [
+            timestamp for timestamp in self.request_timestamps 
+            if now - timestamp < self.rate_limit_window
+        ]
+        
+        # 현재 요청 수가 제한을 초과하는지 확인
+        if len(self.request_timestamps) >= self.rate_limit_requests_per_minute:
+            # 가장 오래된 요청 시간을 기준으로 대기 시간 계산
+            oldest_request = min(self.request_timestamps)
+            wait_time = self.rate_limit_window - (now - oldest_request) + 1  # 1초 버퍼
+            return max(wait_time, 0)
+        
+        return 0
+    
+    def _record_request(self):
+        """API 요청을 기록합니다."""
+        self.request_timestamps.append(time.time())
+    
+    async def _make_api_request_with_rate_limit(self, prompt: str, retry_count: int = 0) -> str:
+        """Rate limit을 고려하여 API 요청을 수행합니다."""
+        try:
+            # Rate limit 확인
+            wait_time = self._check_rate_limit()
+            if wait_time > 0:
+                logger.info(f"Rate limit 대기: {wait_time:.1f}초")
+                await asyncio.sleep(wait_time)
+            
+            # API 요청 기록
+            self._record_request()
+            
+            # API 호출
+            response = await self.model.generate_content_async(prompt)
+            return response.text.strip()
+            
+        except Exception as e:
+            error_str = str(e)
+            
+            # Rate limit 에러 처리
+            if "quota" in error_str.lower() or "rate" in error_str.lower() or "429" in error_str:
+                if retry_count < self.max_retries:
+                    # 지수 백오프로 대기 시간 증가
+                    wait_time = self.base_delay * (2 ** retry_count)
+                    logger.warning(f"Rate limit 에러 발생, {wait_time}초 후 재시도 ({retry_count + 1}/{self.max_retries}): {error_str}")
+                    await asyncio.sleep(wait_time)
+                    return await self._make_api_request_with_rate_limit(prompt, retry_count + 1)
+                else:
+                    logger.error(f"최대 재시도 횟수 초과, API 요청 실패: {error_str}")
+                    raise Exception(f"Rate limit 에러로 인한 API 요청 실패: {error_str}")
+            else:
+                logger.error(f"API 요청 에러: {error_str}")
+                raise
 
     async def extract_structured_data_2_step(self, pdf_content: str, pdf_filename: str = "") -> Dict[str, Any]:
         """2단계 파이프라인을 통해 PDF에서 구조화된 데이터를 추출합니다."""
@@ -54,8 +121,7 @@ class GeminiService:
             logger.info("2단계 추출 파이프라인 시작: 1단계 - 분석 및 그룹핑")
             step1_prompt = f"{self.analyzer_prompt}\n\n**문서 원본 텍스트:**\n{pdf_content}"
             
-            response_step1 = await self.model.generate_content_async(step1_prompt)
-            analysis_result_str = response_step1.text.strip()
+            analysis_result_str = await self._make_api_request_with_rate_limit(step1_prompt)
 
             if "```json" in analysis_result_str:
                 analysis_json_str = analysis_result_str.split("```json")[1].split("```")[0].strip()
@@ -71,8 +137,7 @@ class GeminiService:
             filename_info = f"\n\n**파일명:** {pdf_filename}" if pdf_filename else ""
             step2_prompt = f"{self.db_structuring_prompt}\n\n**DB 스키마:**\n{db_schema}{filename_info}\n\n**1단계 분석 결과 (JSON):**\n{json.dumps(analysis_json, ensure_ascii=False, indent=2)}"
 
-            response_step2 = await self.model.generate_content_async(step2_prompt)
-            final_result_str = response_step2.text.strip()
+            final_result_str = await self._make_api_request_with_rate_limit(step2_prompt)
 
             if "```json" in final_result_str:
                 final_json_str = final_result_str.split("```json")[1].split("```")[0].strip()
@@ -142,8 +207,7 @@ class GeminiService:
         prompt = f"{self.nl2sql_prompt}\n\n{natural_query}"
         
         try:
-            response = await self.model.generate_content_async(prompt)
-            sql_query = response.text.strip()
+            sql_query = await self._make_api_request_with_rate_limit(prompt)
             
             # SQL 쿼리에서 불필요한 텍스트 제거
             if "```sql" in sql_query:
@@ -165,8 +229,7 @@ class GeminiService:
             prompt = f"{self.extractor_prompt}\n\n{pdf_content}"
         
         try:
-            response = await self.model.generate_content_async(prompt)
-            result = response.text.strip()
+            result = await self._make_api_request_with_rate_limit(prompt)
             
             # JSON 추출
             if "```json" in result:
@@ -284,8 +347,7 @@ class GeminiService:
         prompt = f"{self.validator_prompt}\n\n**원본 텍스트:**\n{original_text}\n\n**추출된 데이터:**\n{json.dumps(extracted_data, ensure_ascii=False, indent=2)}"
         
         try:
-            response = await self.model.generate_content_async(prompt)
-            result = response.text.strip()
+            result = await self._make_api_request_with_rate_limit(prompt)
             
             # JSON 추출
             if "```json" in result:
@@ -304,3 +366,136 @@ class GeminiService:
                 "corrections": {},
                 "confidence_score": 0.0
             }
+    
+    async def summarize_violation_content(self, violation_full_text: str) -> str:
+        """위반 내용 전문을 AI로 요약합니다."""
+        if not violation_full_text.strip():
+            return ""
+        
+        prompt = f"""
+다음은 금융감독원 의결서의 '조치 이유' 섹션 내용입니다. 이를 핵심 위반 내용으로 간단명료하게 요약해주세요.
+
+**요약 지침:**
+1. 위반 행위의 핵심만 2-3문장으로 요약
+2. 법적 근거나 절차적 설명은 제외
+3. 구체적인 위반 사실과 결과에 집중
+4. 한국어로 작성
+
+**원문:**
+{violation_full_text}
+
+**요약 결과 (2-3문장):**
+"""
+        
+        try:
+            summary = await self._make_api_request_with_rate_limit(prompt)
+            
+            logger.info(f"위반 내용 요약 완료: {len(summary)}자")
+            return summary
+            
+        except Exception as e:
+            logger.error(f"위반 내용 요약 실패: {e}")
+            return ""
+    
+    async def extract_target_details_ai(self, text: str, rule_based_targets: Dict[str, Any]) -> Dict[str, Any]:
+        """조치대상자 세부 정보를 AI로 추출하여 Rule-based 결과를 보완합니다."""
+        
+        prompt = f"""
+다음 금융감독원 의결서에서 조치대상자의 세부 정보를 추출해주세요.
+
+**기존 Rule-based 추출 결과:**
+{json.dumps(rule_based_targets, ensure_ascii=False, indent=2)}
+
+**추가로 추출할 정보:**
+1. 개인 대상자의 경우: 정확한 직책, 성명 (익명화된 경우 그대로)
+2. 회사/기관의 경우: 정확한 회사명
+3. 외부감사인의 경우: 소속 회계법인명
+
+**문서 내용:**
+{text}
+
+**JSON 형식으로 결과 출력:**
+{{
+    "target_type": "기관/임직원/외부감사인",
+    "targets": [
+        {{
+            "type": "대상자 유형",
+            "description": "전체 설명",
+            "company": "회사명 (해당시)",
+            "position": "직책 (해당시)",
+            "name": "성명 (해당시)",
+            "firm": "소속 법인 (외부감사인의 경우)"
+        }}
+    ]
+}}
+"""
+        
+        try:
+            result = await self._make_api_request_with_rate_limit(prompt)
+            
+            # JSON 추출
+            if "```json" in result:
+                json_str = result.split("```json")[1].split("```")[0].strip()
+            elif "```" in result:
+                json_str = result.split("```")[1].strip()
+            else:
+                json_str = result
+            
+            enhanced_targets = json.loads(json_str)
+            logger.info(f"AI 조치대상자 세부 정보 추출 완료: {enhanced_targets}")
+            return enhanced_targets
+            
+        except Exception as e:
+            logger.error(f"AI 조치대상자 추출 실패: {e}")
+            return rule_based_targets  # 실패 시 기존 결과 반환
+    
+    async def classify_categories_ai(self, text: str, filename: str) -> Dict[str, str]:
+        """AI를 사용하여 카테고리를 자동 분류합니다."""
+        
+        prompt = f"""
+다음 금융감독원 의결서의 내용과 파일명을 보고 카테고리를 분류해주세요.
+
+**분류 기준:**
+
+**category_1 (대분류):**
+- "제재": 과태료, 과징금, 직무정지, 업무정지 등 처벌성 조치
+- "인허가": 인가, 승인, 허가, 등록, 변경승인 등
+- "정책": 법령 개정, 규정 제정, 정책 수립 등
+
+**category_2 (중분류):**
+- "기관": 금융기관 대상 조치
+- "임직원": 개인 임직원 대상 조치  
+- "전문가": 회계사, 감사인 등 전문가 대상 조치
+- "정관변경": 정관 변경 관련
+- "법률개정": 법령, 규정 개정 관련
+
+**파일명:** {filename}
+
+**문서 내용:**
+{text[:1000]}...
+
+**JSON 형식으로 결과 출력:**
+{{
+    "category_1": "제재/인허가/정책 중 하나",
+    "category_2": "기관/임직원/전문가/정관변경/법률개정 중 하나"
+}}
+"""
+        
+        try:
+            result = await self._make_api_request_with_rate_limit(prompt)
+            
+            # JSON 추출
+            if "```json" in result:
+                json_str = result.split("```json")[1].split("```")[0].strip()
+            elif "```" in result:
+                json_str = result.split("```")[1].strip()
+            else:
+                json_str = result
+            
+            categories = json.loads(json_str)
+            logger.info(f"AI 카테고리 분류 완료: {categories}")
+            return categories
+            
+        except Exception as e:
+            logger.error(f"AI 카테고리 분류 실패: {e}")
+            return {"category_1": "제재", "category_2": "기관"}  # 기본값

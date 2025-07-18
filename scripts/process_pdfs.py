@@ -34,6 +34,9 @@ async def main():
     parser.add_argument('--pdf-dir', type=str, help='PDF 디렉토리', default=settings.PROCESSED_PDF_DIR)
     parser.add_argument('--single-file', type=str, help='단일 파일 처리', default=None)
     parser.add_argument('--stats', action='store_true', help='처리 통계 출력')
+    parser.add_argument('--fsc-only', action='store_true', default=True, help='금융위 의결서 형식만 처리 (기본값)')
+    parser.add_argument('--processing-mode', type=str, choices=['rule-based', 'hybrid', 'ai-only'], 
+                        default='hybrid', help='처리 모드 선택 (기본값: hybrid)')
     
     args = parser.parse_args()
     
@@ -42,14 +45,17 @@ async def main():
         db = SessionLocal()
         
         # PDF 프로세서 초기화 (2단계 파이프라인 사용)
-        processor = PDFProcessor(db, use_2_step_pipeline=True)
+        processor = PDFProcessor(db, use_2_step_pipeline=True, processing_mode=args.processing_mode)
         
         if args.stats:
             # 처리 통계 출력
-            stats = processor.get_processing_stats()
+            stats = processor.get_processing_stats(fsc_only=args.fsc_only)
             logger.info("=== 처리 통계 ===")
             logger.info(f"전체 PDF 파일 수: {stats['total_pdf_files']}")
-            logger.info(f"처리 대상 PDF 파일 수 (의결*. 형식): {stats['target_pdf_files']}")
+            if args.fsc_only:
+                logger.info(f"처리 대상 PDF 파일 수 (금융위 의결서 형식): {stats['target_pdf_files']}")
+            else:
+                logger.info(f"처리 대상 PDF 파일 수 (의결*. 형식): {stats['target_pdf_files']}")
             logger.info(f"처리된 의결서 수: {stats['total_decisions']}")
             logger.info(f"처리된 조치 수: {stats['total_actions']}")
             logger.info(f"처리된 법률 수: {stats['total_laws']}")
@@ -57,8 +63,8 @@ async def main():
             
         elif args.single_file:
             # 단일 파일 처리
-            logger.info(f"단일 파일 처리 시작: {args.single_file}")
-            result = await processor.process_single_pdf(args.single_file)
+            logger.info(f"단일 파일 처리 시작 ({args.processing_mode} 모드): {args.single_file}")
+            result = await processor.process_single_pdf(args.single_file, processing_mode=args.processing_mode)
             
             if result['success']:
                 logger.info("파일 처리 완료!")
@@ -70,8 +76,11 @@ async def main():
                 
         else:
             # 모든 PDF 파일 처리
-            logger.info("모든 PDF 파일 처리 시작")
-            results = await processor.process_all_pdfs()
+            if args.fsc_only:
+                logger.info(f"금융위 의결서 형식 PDF 파일 처리 시작 ({args.processing_mode} 모드)")
+            else:
+                logger.info(f"모든 의결 PDF 파일 처리 시작 ({args.processing_mode} 모드)")
+            results = await processor.process_all_pdfs(fsc_only=args.fsc_only)
             
             # 결과 요약
             successful = sum(1 for r in results if r['success'])
