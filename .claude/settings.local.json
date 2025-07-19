@@ -5,7 +5,15 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Bash(mkdir:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:ant.design)",
+      "WebFetch(domain:ant.design)",
+      "WebFetch(domain:ant.design)",
+      "WebFetch(domain:ant.design)",
+      "WebFetch(domain:ant.design)"
     ],
     "deny": []
   }

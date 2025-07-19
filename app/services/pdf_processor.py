@@ -103,7 +103,33 @@ class PDFProcessor:
         try:
             filename = os.path.basename(pdf_path)
             
-            # 1. Rule-based 우선 시도
+            # 복수 조치 가능성 먼저 감지
+            has_multiple_actions = self.rule_based_extractor.detect_multiple_actions(pdf_text)
+            
+            if has_multiple_actions:
+                # 복수 조치가 감지되면 바로 2단계 AI 파이프라인 사용
+                logger.info(f"복수 조치 감지됨, 2단계 AI 파이프라인 사용: {pdf_path}")
+                
+                try:
+                    extracted_data = await self.gemini_service.extract_structured_data_2_step(pdf_text, filename)
+                    
+                    # 데이터베이스에 저장
+                    result = await self._save_to_database(extracted_data, pdf_path)
+                    
+                    return {
+                        'success': True,
+                        'pdf_path': pdf_path,
+                        'extracted_data': extracted_data,
+                        'processing_mode': 'hybrid-ai-2step',
+                        'db_result': result,
+                    }
+                    
+                except Exception as e:
+                    logger.error(f"2단계 AI 파이프라인 실패: {pdf_path} - {str(e)}")
+                    # 실패 시 Rule-based로 fallback
+                    logger.info("2단계 AI 파이프라인 실패, Rule-based로 fallback")
+            
+            # 1. 단일 조치 또는 AI 실패 시 Rule-based 우선 시도
             try:
                 extracted_data = self.rule_based_extractor.extract_full_document_structure(pdf_text, filename)
                 
@@ -247,6 +273,18 @@ class PDFProcessor:
                 'full_text': extracted_data.get('full_text', ''), # 전문은 최상위에 있을 수 있음
                 'source_file': os.path.basename(pdf_path)
             }
+            
+            # 날짜 정보가 1월 1일인 경우, 의결*.pdf 파일에서 실제 날짜 추출 시도
+            if decision_data['decision_month'] == 1 and decision_data['decision_day'] == 1:
+                actual_date = await self._extract_actual_meeting_date(
+                    decision_data['decision_year'], 
+                    decision_data['decision_id'],
+                    self.processed_pdf_dir
+                )
+                if actual_date:
+                    decision_data['decision_month'] = actual_date['month']
+                    decision_data['decision_day'] = actual_date['day']
+                    logger.info(f"실제 회의 날짜로 업데이트: {decision_data['decision_year']}-{decision_data['decision_id']}호 -> {actual_date['month']}월 {actual_date['day']}일")
             
             # 의결서 저장
             decision = self.decision_service.create_decision(decision_data)
@@ -654,3 +692,62 @@ class PDFProcessor:
         except Exception as e:
             logger.error(f"AI 보완 처리 실패: {e}")
             return extracted_data  # 실패 시 원본 반환
+    
+    async def _extract_actual_meeting_date(self, decision_year: int, decision_id: int, processed_pdf_dir: str) -> Optional[Dict[str, int]]:
+        """의결*.pdf 파일에서 실제 금융위원회 회의 날짜를 추출합니다."""
+        try:
+            import re
+            
+            # 매칭되는 의결 파일 찾기
+            pattern = f'의결{decision_id}\\.'
+            matching_files = []
+            
+            for filename in os.listdir(processed_pdf_dir):
+                if re.match(pattern, filename) and filename.endswith('.pdf'):
+                    matching_files.append(filename)
+            
+            if not matching_files:
+                logger.debug(f"매칭되는 의결 파일 없음: {decision_year}-{decision_id}호")
+                return None
+            
+            # 첫 번째 매칭 파일에서 날짜 추출
+            decision_file_path = os.path.join(processed_pdf_dir, matching_files[0])
+            pdf_text = self.extract_text_from_pdf(decision_file_path)
+            
+            if not pdf_text:
+                return None
+            
+            # 의결일자 패턴들 (실제 PDF에서 확인된 패턴)
+            date_patterns = [
+                # 의결연월일 2025. 3.19. (제5차) 패턴
+                r'의결\s*연월일\s*(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*\(제(\d+)차\)',
+                # 의결일: 2025. 1. 8
+                r'의결일\s*[:：]\s*(\d{4})[\.년]\s*(\d{1,2})[\.월]\s*(\d{1,2})',
+                # 의결일자: 2025년 1월 8일
+                r'의결일자\s*[:：]\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일',
+                # 2025년 1월 8일 (문서 상단에 있는 경우)
+                r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일.*?의결',
+                # 2025. 1. 8. (일반 날짜 형식)
+                r'(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.',
+            ]
+            
+            for pattern in date_patterns:
+                match = re.search(pattern, pdf_text[:1000])  # 문서 앞부분에서만 검색
+                if match:
+                    year = int(match.group(1))
+                    month = int(match.group(2))
+                    day = int(match.group(3))
+                    
+                    # 연도 확인
+                    if year == decision_year:
+                        logger.info(f"의결 파일에서 날짜 추출 성공: {matching_files[0]} -> {year}년 {month}월 {day}일")
+                        return {'month': month, 'day': day}
+                    else:
+                        logger.warning(f"연도 불일치: 예상 {decision_year}, 실제 {year}")
+            
+            logger.debug(f"날짜 패턴 매칭 실패: {matching_files[0]}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"실제 회의 날짜 추출 실패: {e}")
+            return None

@@ -15,7 +15,10 @@ class GeminiService:
     
     def __init__(self):
         genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        # 기본 모델 (PDF 처리, 데이터 추출 등)
+        self.main_model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        # NL2SQL 전용 모델 (빠른 처리, 비용 효율성)
+        self.nl2sql_model = genai.GenerativeModel("gemini-2.5-flash-lite-preview-06-17")
         self.prompt_dir = settings.PROMPT_DIR
         self._load_prompts()
         
@@ -36,8 +39,17 @@ class GeminiService:
             with open(f"{self.prompt_dir}/validator_prompt.txt", 'r', encoding='utf-8') as f:
                 self.validator_prompt = f.read()
             
-            with open(f"{self.prompt_dir}/nl2sql_prompt.txt", 'r', encoding='utf-8') as f:
-                self.nl2sql_prompt = f.read()
+            # Flash-Lite 최적화 프롬프트 우선 시도
+            try:
+                with open(f"{self.prompt_dir}/nl2sql_flash_lite_prompt.txt", 'r', encoding='utf-8') as f:
+                    self.nl2sql_prompt = f.read()
+            except FileNotFoundError:
+                try:
+                    with open(f"{self.prompt_dir}/nl2sql_prompt_v2.txt", 'r', encoding='utf-8') as f:
+                        self.nl2sql_prompt = f.read()
+                except FileNotFoundError:
+                    with open(f"{self.prompt_dir}/nl2sql_prompt.txt", 'r', encoding='utf-8') as f:
+                        self.nl2sql_prompt = f.read()
 
             # 2단계 파이프라인 프롬프트 로드
             with open(f"{self.prompt_dir}/analyzer_prompt.txt", 'r', encoding='utf-8') as f:
@@ -78,9 +90,12 @@ class GeminiService:
         """API 요청을 기록합니다."""
         self.request_timestamps.append(time.time())
     
-    async def _make_api_request_with_rate_limit(self, prompt: str, retry_count: int = 0) -> str:
+    async def _make_api_request_with_rate_limit(self, prompt: str, model=None, retry_count: int = 0) -> str:
         """Rate limit을 고려하여 API 요청을 수행합니다."""
         try:
+            # 모델 선택 (기본값: main_model)
+            selected_model = model if model is not None else self.main_model
+            
             # Rate limit 확인
             wait_time = self._check_rate_limit()
             if wait_time > 0:
@@ -91,7 +106,7 @@ class GeminiService:
             self._record_request()
             
             # API 호출
-            response = await self.model.generate_content_async(prompt)
+            response = await selected_model.generate_content_async(prompt)
             return response.text.strip()
             
         except Exception as e:
@@ -104,7 +119,7 @@ class GeminiService:
                     wait_time = self.base_delay * (2 ** retry_count)
                     logger.warning(f"Rate limit 에러 발생, {wait_time}초 후 재시도 ({retry_count + 1}/{self.max_retries}): {error_str}")
                     await asyncio.sleep(wait_time)
-                    return await self._make_api_request_with_rate_limit(prompt, retry_count + 1)
+                    return await self._make_api_request_with_rate_limit(prompt, model, retry_count + 1)
                 else:
                     logger.error(f"최대 재시도 횟수 초과, API 요청 실패: {error_str}")
                     raise Exception(f"Rate limit 에러로 인한 API 요청 실패: {error_str}")
@@ -121,7 +136,7 @@ class GeminiService:
             logger.info("2단계 추출 파이프라인 시작: 1단계 - 분석 및 그룹핑")
             step1_prompt = f"{self.analyzer_prompt}\n\n**문서 원본 텍스트:**\n{pdf_content}"
             
-            analysis_result_str = await self._make_api_request_with_rate_limit(step1_prompt)
+            analysis_result_str = await self._make_api_request_with_rate_limit(step1_prompt, model=self.main_model)
 
             if "```json" in analysis_result_str:
                 analysis_json_str = analysis_result_str.split("```json")[1].split("```")[0].strip()
@@ -137,7 +152,7 @@ class GeminiService:
             filename_info = f"\n\n**파일명:** {pdf_filename}" if pdf_filename else ""
             step2_prompt = f"{self.db_structuring_prompt}\n\n**DB 스키마:**\n{db_schema}{filename_info}\n\n**1단계 분석 결과 (JSON):**\n{json.dumps(analysis_json, ensure_ascii=False, indent=2)}"
 
-            final_result_str = await self._make_api_request_with_rate_limit(step2_prompt)
+            final_result_str = await self._make_api_request_with_rate_limit(step2_prompt, model=self.main_model)
 
             if "```json" in final_result_str:
                 final_json_str = final_result_str.split("```json")[1].split("```")[0].strip()
@@ -203,11 +218,12 @@ class GeminiService:
         """
     
     async def convert_nl_to_sql(self, natural_query: str) -> str:
-        """자연어 쿼리를 SQL로 변환합니다."""
+        """자연어 쿼리를 SQL로 변환합니다. (Flash-Lite 모델 사용)"""
         prompt = f"{self.nl2sql_prompt}\n\n{natural_query}"
         
         try:
-            sql_query = await self._make_api_request_with_rate_limit(prompt)
+            # NL2SQL 전용 모델 사용
+            sql_query = await self._make_api_request_with_rate_limit(prompt, model=self.nl2sql_model)
             
             # SQL 쿼리에서 불필요한 텍스트 제거
             if "```sql" in sql_query:
@@ -220,6 +236,68 @@ class GeminiService:
         except Exception as e:
             raise Exception(f"SQL 변환 중 오류 발생: {str(e)}")
     
+    async def convert_nl_to_sql_advanced(self, natural_query: str, query_type: str = None) -> Dict[str, Any]:
+        """고도화된 NL2SQL 변환 (AI 전용, Flash-Lite 모델)"""
+        try:
+            # 질의 유형별 프롬프트 선택
+            if query_type:
+                prompt = self._get_typed_nl2sql_prompt(natural_query, query_type)
+            else:
+                prompt = f"{self.nl2sql_prompt}\n\n사용자 질문: {natural_query}"
+            
+            # Flash-Lite 모델로 SQL 생성
+            response = await self._make_api_request_with_rate_limit(prompt, model=self.nl2sql_model)
+            
+            # 구조화된 응답 파싱
+            return self._parse_nl2sql_response(response)
+            
+        except Exception as e:
+            logger.error(f"고도화된 NL2SQL 변환 실패: {e}")
+            raise Exception(f"AI 기반 SQL 변환 중 오류 발생: {str(e)}")
+    
+    def _get_typed_nl2sql_prompt(self, query: str, query_type: str) -> str:
+        """질의 유형별 최적화된 프롬프트 생성"""
+        base_prompt = self.nl2sql_prompt
+        
+        type_specific_guidance = {
+            "specific_target": "특정 회사명이나 개인명을 정확히 매칭하여 검색하세요.",
+            "violation_type": "위반 행위 내용을 semantic하게 분석하여 관련 사례를 찾으세요.",
+            "action_level": "조치 유형과 금액 조건을 정확히 파싱하여 필터링하세요.",
+            "time_based": "복잡한 날짜 조건을 정확히 SQL로 변환하세요.",
+            "complex_condition": "여러 조건을 논리적으로 조합하여 정확한 결과를 도출하세요.",
+            "statistics": "집계 함수와 정렬을 활용하여 통계 분석 쿼리를 생성하세요."
+        }
+        
+        guidance = type_specific_guidance.get(query_type, "")
+        return f"{base_prompt}\n\n특별 지침: {guidance}\n\n사용자 질문: {query}"
+    
+    def _parse_nl2sql_response(self, response: str) -> Dict[str, Any]:
+        """AI 응답을 구조화된 형태로 파싱"""
+        try:
+            # SQL 추출
+            sql_query = ""
+            if "```sql" in response:
+                sql_query = response.split("```sql")[1].split("```")[0].strip()
+            elif "```" in response:
+                sql_query = response.split("```")[1].strip()
+            else:
+                # SQL 블록이 없으면 전체를 SQL로 간주
+                sql_query = response.strip()
+            
+            return {
+                "success": True,
+                "sql_query": sql_query,
+                "explanation": response,
+                "model_used": "gemini-2.5-flash-lite-preview-06-17"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "raw_response": response
+            }
+    
     async def extract_structured_data(self, pdf_content: str, focused_extraction: Dict[str, Any] = None) -> Dict[str, Any]:
         """(기존 단일 단계) PDF 내용에서 구조화된 데이터를 추출합니다."""
         if focused_extraction:
@@ -229,7 +307,7 @@ class GeminiService:
             prompt = f"{self.extractor_prompt}\n\n{pdf_content}"
         
         try:
-            result = await self._make_api_request_with_rate_limit(prompt)
+            result = await self._make_api_request_with_rate_limit(prompt, model=self.main_model)
             
             # JSON 추출
             if "```json" in result:
@@ -347,7 +425,7 @@ class GeminiService:
         prompt = f"{self.validator_prompt}\n\n**원본 텍스트:**\n{original_text}\n\n**추출된 데이터:**\n{json.dumps(extracted_data, ensure_ascii=False, indent=2)}"
         
         try:
-            result = await self._make_api_request_with_rate_limit(prompt)
+            result = await self._make_api_request_with_rate_limit(prompt, model=self.main_model)
             
             # JSON 추출
             if "```json" in result:
@@ -388,7 +466,7 @@ class GeminiService:
 """
         
         try:
-            summary = await self._make_api_request_with_rate_limit(prompt)
+            summary = await self._make_api_request_with_rate_limit(prompt, model=self.main_model)
             
             logger.info(f"위반 내용 요약 완료: {len(summary)}자")
             return summary
@@ -431,7 +509,7 @@ class GeminiService:
 """
         
         try:
-            result = await self._make_api_request_with_rate_limit(prompt)
+            result = await self._make_api_request_with_rate_limit(prompt, model=self.main_model)
             
             # JSON 추출
             if "```json" in result:
@@ -482,7 +560,7 @@ class GeminiService:
 """
         
         try:
-            result = await self._make_api_request_with_rate_limit(prompt)
+            result = await self._make_api_request_with_rate_limit(prompt, model=self.main_model)
             
             # JSON 추출
             if "```json" in result:

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>금융위원회 의결서 분석 대시보드</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+            background-color: #f5f5f7;
+            color: #1d1d1f;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: #fff;
+            padding: 30px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1d1d1f;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #86868b;
+            margin-top: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .card {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        
+        .card-title {
+            color: #86868b;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+        
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #0071e3;
+        }
+        
+        .card-subtitle {
+            color: #515154;
+            font-size: 0.95rem;
+            margin-top: 5px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .chart-container {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #1d1d1f;
+        }
+        
+        .table-container {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        th {
+            background-color: #f9f9f9;
+            font-weight: 600;
+            color: #515154;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f7;
+        }
+        
+        .amount {
+            font-weight: 600;
+            color: #0071e3;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2rem;
+            color: #86868b;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2rem;
+            color: #ff3b30;
+        }
+        
+        canvas {
+            max-height: 400px;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .card-value {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>금융위원회 의결서 분석 대시보드</h1>
+            <p class="subtitle">2025년 금융 규제 현황 및 통계</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div id="loading" class="loading">데이터를 불러오는 중...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="dashboard" style="display: none;">
+            <!-- 요약 카드 -->
+            <div class="summary-cards" id="summaryCards"></div>
+            
+            <!-- 차트 그리드 -->
+            <div class="charts-grid">
+                <!-- 월별 의결서 수 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">월별 의결서 현황 (2025년)</h2>
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+                
+                <!-- 카테고리별 분포 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">카테고리별 분포</h2>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                
+                <!-- 조치 유형별 통계 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">조치 유형별 통계</h2>
+                    <canvas id="actionTypeChart"></canvas>
+                </div>
+                
+                <!-- 업권별 제재 현황 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">업권별 제재 현황</h2>
+                    <canvas id="sectorChart"></canvas>
+                </div>
+                
+                <!-- 과태료 금액대별 분포 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">과태료/과징금 금액대별 분포</h2>
+                    <canvas id="fineRangeChart"></canvas>
+                </div>
+                
+                <!-- 법률별 인용 횟수 -->
+                <div class="chart-container">
+                    <h2 class="chart-title">주요 법률 인용 횟수 (Top 10)</h2>
+                    <canvas id="lawCitationChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- 상위 과태료 테이블 -->
+            <div class="table-container">
+                <h2 class="chart-title">최고액 과태료/과징금 Top 10</h2>
+                <table id="topFinesTable">
+                    <thead>
+                        <tr>
+                            <th>대상자</th>
+                            <th>조치 유형</th>
+                            <th>금액</th>
+                            <th>위반 내용</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            
+            <!-- 최근 의결서 테이블 -->
+            <div class="table-container">
+                <h2 class="chart-title">최근 의결서</h2>
+                <table id="recentDecisionsTable">
+                    <thead>
+                        <tr>
+                            <th>의결번호</th>
+                            <th>날짜</th>
+                            <th>제목</th>
+                            <th>카테고리</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 전역 변수
+        let dashboardData = null;
+        let charts = {};
+        
+        // 차트 기본 설정
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif';
+        Chart.defaults.color = '#1d1d1f';
+        
+        // 색상 팔레트
+        const colors = {
+            primary: '#0071e3',
+            secondary: '#5e5ce6',
+            success: '#34c759',
+            warning: '#ff9500',
+            danger: '#ff3b30',
+            info: '#32ade6',
+            purple: '#af52de',
+            pink: '#ff2d55',
+            gray: '#8e8e93'
+        };
+        
+        const chartColors = [
+            colors.primary,
+            colors.secondary,
+            colors.success,
+            colors.warning,
+            colors.danger,
+            colors.info,
+            colors.purple,
+            colors.pink,
+            colors.gray
+        ];
+        
+        // 데이터 로드
+        async function loadDashboardData() {
+            try {
+                const response = await fetch('dashboard_data.json');
+                if (!response.ok) {
+                    throw new Error('데이터를 불러올 수 없습니다.');
+                }
+                dashboardData = await response.json();
+                renderDashboard();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = '데이터를 불러오는 중 오류가 발생했습니다: ' + error.message;
+            }
+        }
+        
+        // 대시보드 렌더링
+        function renderDashboard() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            
+            // 요약 카드 렌더링
+            renderSummaryCards();
+            
+            // 차트 렌더링
+            renderCharts();
+            
+            // 테이블 렌더링
+            renderTables();
+        }
+        
+        // 요약 카드 렌더링
+        function renderSummaryCards() {
+            const container = document.getElementById('summaryCards');
+            const summary = dashboardData.summary;
+            
+            const cards = [
+                { title: '총 의결서', value: summary.total_decisions.toLocaleString(), subtitle: '2025년 처리 완료' },
+                { title: '총 조치 건수', value: summary.total_actions.toLocaleString(), subtitle: '제재 및 행정처분' },
+                { title: '총 과태료/과징금', value: (summary.total_fines / 100000000).toFixed(1) + '억원', subtitle: summary.total_fines_formatted },
+                { title: '관련 법률', value: summary.total_laws.toLocaleString(), subtitle: '인용된 법률 조항' }
+            ];
+            
+            container.innerHTML = cards.map(card => `
+                <div class="card">
+                    <div class="card-title">${card.title}</div>
+                    <div class="card-value">${card.value}</div>
+                    <div class="card-subtitle">${card.subtitle}</div>
+                </div>
+            `).join('');
+        }
+        
+        // 차트 렌더링
+        function renderCharts() {
+            // 월별 의결서 차트
+            charts.monthly = new Chart(document.getElementById('monthlyChart'), {
+                type: 'line',
+                data: {
+                    labels: dashboardData.charts.monthly_decisions.labels,
+                    datasets: [{
+                        label: '의결서 수',
+                        data: dashboardData.charts.monthly_decisions.data,
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primary + '20',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 5 }
+                        }
+                    }
+                }
+            });
+            
+            // 카테고리별 분포 차트
+            charts.category = new Chart(document.getElementById('categoryChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: dashboardData.charts.category_distribution.labels,
+                    datasets: [{
+                        data: dashboardData.charts.category_distribution.data,
+                        backgroundColor: chartColors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { padding: 15 }
+                        }
+                    }
+                }
+            });
+            
+            // 조치 유형별 차트
+            charts.actionType = new Chart(document.getElementById('actionTypeChart'), {
+                type: 'bar',
+                data: {
+                    labels: dashboardData.charts.action_types.labels,
+                    datasets: [{
+                        label: '건수',
+                        data: dashboardData.charts.action_types.data,
+                        backgroundColor: colors.secondary + '80'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { 
+                                autoSkip: false,
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+            
+            // 업권별 제재 차트
+            charts.sector = new Chart(document.getElementById('sectorChart'), {
+                type: 'horizontalBar',
+                data: {
+                    labels: dashboardData.charts.industry_sectors.labels,
+                    datasets: [{
+                        label: '제재 건수',
+                        data: dashboardData.charts.industry_sectors.data,
+                        backgroundColor: colors.success + '80'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { beginAtZero: true }
+                    }
+                }
+            });
+            
+            // 과태료 금액대별 분포
+            charts.fineRange = new Chart(document.getElementById('fineRangeChart'), {
+                type: 'pie',
+                data: {
+                    labels: dashboardData.charts.fine_ranges.labels,
+                    datasets: [{
+                        data: dashboardData.charts.fine_ranges.data,
+                        backgroundColor: chartColors
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: { padding: 15 }
+                        }
+                    }
+                }
+            });
+            
+            // 법률별 인용 횟수
+            charts.lawCitation = new Chart(document.getElementById('lawCitationChart'), {
+                type: 'bar',
+                data: {
+                    labels: dashboardData.charts.law_citations.labels,
+                    datasets: [{
+                        label: '인용 횟수',
+                        data: dashboardData.charts.law_citations.data,
+                        backgroundColor: colors.purple + '80'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { 
+                                autoSkip: false,
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+        
+        // 테이블 렌더링
+        function renderTables() {
+            // 상위 과태료 테이블
+            const topFinesBody = document.querySelector('#topFinesTable tbody');
+            topFinesBody.innerHTML = dashboardData.top_fines.map(item => `
+                <tr>
+                    <td>${item.entity_name}</td>
+                    <td>${item.action_type}</td>
+                    <td class="amount">${item.fine_amount_formatted}</td>
+                    <td>${item.violation_summary}</td>
+                </tr>
+            `).join('');
+            
+            // 최근 의결서 테이블
+            const recentDecisionsBody = document.querySelector('#recentDecisionsTable tbody');
+            recentDecisionsBody.innerHTML = dashboardData.recent_decisions.map(item => `
+                <tr>
+                    <td>${item.decision_no}</td>
+                    <td>${item.date}</td>
+                    <td>${item.title}</td>
+                    <td>${item.category}</td>
+                </tr>
+            `).join('');
+        }
+        
+        // 페이지 로드 시 실행
+        document.addEventListener('DOMContentLoaded', loadDashboardData);
+    </script>
+</body>
+</html>

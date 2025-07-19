@@ -1,0 +1,256 @@
+{
+  "generated_at": "2025-07-18T16:54:19.853994",
+  "summary": {
+    "total_decisions": 121,
+    "total_actions": 121,
+    "total_laws": 51,
+    "total_fines": 81003600000,
+    "total_fines_formatted": "81,003,600,000원"
+  },
+  "charts": {
+    "daily_decisions": {
+      "labels": [
+        "1월 1일",
+        "1월 8일",
+        "1월 10일",
+        "1월 14일",
+        "1월 16일",
+        "1월 20일",
+        "1월 22일",
+        "1월 24일",
+        "1월 27일",
+        "1월 29일"
+      ],
+      "data": [
+        15,
+        5,
+        1,
+        12,
+        21,
+        13,
+        4,
+        5,
+        5,
+        2
+      ]
+    },
+    "category_distribution": {
+      "labels": [],
+      "data": []
+    },
+    "action_types": {
+      "labels": [
+        "과태료",
+        "과징금",
+        "",
+        "경고",
+        "인가",
+        "직무정지",
+        "재심"
+      ],
+      "data": [
+        56,
+        40,
+        7,
+        6,
+        6,
+        5,
+        1
+      ]
+    },
+    "industry_sectors": {
+      "labels": [
+        "금융투자",
+        "은행",
+        "보험",
+        "회계/감사",
+        "기타"
+      ],
+      "data": [
+        67,
+        22,
+        14,
+        14,
+        4
+      ]
+    },
+    "fine_ranges": {
+      "labels": [
+        "1천만원 미만",
+        "5천만원 미만",
+        "1억원 미만",
+        "5억원 미만",
+        "10억원 미만",
+        "10억원 이상"
+      ],
+      "data": [
+        19,
+        25,
+        8,
+        16,
+        5,
+        48
+      ]
+    },
+    "law_citations": {
+      "labels": [
+        "자본시장법",
+        "주식회사 등의 외부감사에 관한 법률",
+        "자본시장과 금융투자업에 관한 법률",
+        "금융회사의 지배구조에 관한 법률",
+        "보험업법시행령",
+        "자본시장법",
+        "보험업법",
+        "신용정보업감독규정",
+        "신용정보의 이용 및 보호에 관한 법률",
+        "신용정보법"
+      ],
+      "data": [
+        114,
+        38,
+        25,
+        20,
+        18,
+        16,
+        14,
+        12,
+        11,
+        10
+      ]
+    }
+  },
+  "top_fines": [
+    {
+      "entity_name": "교보증권 ㈜",
+      "action_type": "과태료",
+      "fine_amount": 6540000000,
+      "fine_amount_formatted": "6,540,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "한국투자증권 ㈜",
+      "action_type": "과태료",
+      "fine_amount": 5580000000,
+      "fine_amount_formatted": "5,580,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "㈜OOO 외 3인",
+      "action_type": "과징금",
+      "fine_amount": 5451900000,
+      "fine_amount_formatted": "5,451,900,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "OOOOO ㈜ 외 4인",
+      "action_type": "과징금",
+      "fine_amount": 5429100000,
+      "fine_amount_formatted": "5,429,100,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "KB증권㈜",
+      "action_type": "과태료",
+      "fine_amount": 5030000000,
+      "fine_amount_formatted": "5,030,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "㈜OOOO 외 3인",
+      "action_type": "과징금",
+      "fine_amount": 4378000000,
+      "fine_amount_formatted": "4,378,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "하나증권 ㈜",
+      "action_type": "과태료",
+      "fine_amount": 4080000000,
+      "fine_amount_formatted": "4,080,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "유진투자증권 ㈜ 외 1인",
+      "action_type": "과태료",
+      "fine_amount": 3615000000,
+      "fine_amount_formatted": "3,615,000,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "㈜OOOOOOO",
+      "action_type": "과징금",
+      "fine_amount": 3408600000,
+      "fine_amount_formatted": "3,408,600,000원",
+      "violation_summary": ""
+    },
+    {
+      "entity_name": "유안타증권 ㈜",
+      "action_type": "과태료",
+      "fine_amount": 3260000000,
+      "fine_amount_formatted": "3,260,000,000원",
+      "violation_summary": ""
+    }
+  ],
+  "recent_decisions": [
+    {
+      "decision_no": "2025-200호",
+      "date": "2025년 1월 1일",
+      "title": "공인회계사 ☆☆☆에 대한 징계의결안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-199호",
+      "date": "2025년 1월 1일",
+      "title": "OOOOO㈜의 사업보고서 및 감사보고서 등에 대한 조사·감리결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-195호",
+      "date": "2025년 1월 29일",
+      "title": "엔에이치아문디자산운용에 대한 정기검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-194호",
+      "date": "2025년 1월 29일",
+      "title": "한국대성자산운용㈜에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-184호",
+      "date": "2025년 1월 27일",
+      "title": "알펜루트자산운용㈜에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-183호",
+      "date": "2025년 1월 27일",
+      "title": "트레스자산운용㈜에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-182호",
+      "date": "2025년 1월 27일",
+      "title": "㈜케이지티자산운용에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-181호",
+      "date": "2025년 1월 27일",
+      "title": "㈜페블즈자산운용에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-180호",
+      "date": "2025년 1월 27일",
+      "title": "에이아이파트너스자산운용㈜에 대한 수시검사 결과 조치안",
+      "category": "미분류"
+    },
+    {
+      "decision_no": "2025-164호",
+      "date": "2025년 1월 1일",
+      "title": "△△△ 등 8개 가상자산에 대한 시세조종행위 조사결과 조치안",
+      "category": "미분류"
+    }
+  ]
+}

@@ -49,9 +49,54 @@ class DecisionService:
         """ID로 의결서를 조회합니다."""
         return self.db.query(Decision).filter(Decision.decision_id == decision_id).first()
     
+    def get_decision_by_composite_key(self, decision_year: int, decision_id: int) -> Optional[Decision]:
+        """복합키로 의결서를 조회합니다."""
+        return self.db.query(Decision).filter(
+            Decision.decision_year == decision_year,
+            Decision.decision_id == decision_id
+        ).first()
+    
     def get_actions_by_decision_id(self, decision_id: int) -> List[Action]:
         """특정 의결서와 관련된 조치 목록을 조회합니다."""
         return self.db.query(Action).filter(Action.decision_id == decision_id).all()
+    
+    def get_actions_by_decision_composite_key(self, decision_year: int, decision_id: int) -> List[Action]:
+        """복합키로 특정 의결서와 관련된 조치 목록을 조회합니다."""
+        return (
+            self.db.query(Action)
+            .join(Decision)
+            .filter(
+                Decision.decision_year == decision_year,
+                Decision.decision_id == decision_id
+            )
+            .all()
+        )
+    
+    def get_laws_by_decision_composite_key(self, decision_year: int, decision_id: int) -> List[Dict[str, Any]]:
+        """복합키로 특정 의결서와 관련된 법률 목록을 조회합니다."""
+        results = (
+            self.db.query(Law, ActionLawMap.article_details)
+            .join(ActionLawMap)
+            .join(Action)
+            .join(Decision)
+            .filter(
+                Decision.decision_year == decision_year,
+                Decision.decision_id == decision_id
+            )
+            .all()
+        )
+        
+        laws = []
+        for law, article_details in results:
+            laws.append({
+                "law_id": law.law_id,
+                "law_name": law.law_name,
+                "law_short_name": law.law_short_name,
+                "law_category": law.law_category,
+                "article_details": article_details
+            })
+        
+        return laws
     
     def get_category_stats(self) -> Dict[str, Any]:
         """카테고리별 통계를 조회합니다."""
