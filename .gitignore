@@ -48,6 +48,7 @@ venv.bak/
 *.sqlite
 *.sqlite3
 fsc_decisions.db
+!fss_db_v2.sqlite  # V2 메인 데이터베이스는 유지
 
 # Logs
 *.log
@@ -138,3 +139,16 @@ coverage/
 # Misc
 .vercel
 .turbo
+
+# Archive directory (old files)
+archive/
+
+# Temporary processing scripts
+process_v2_*.py
+test_v2_*.log
+process_v2_*.log
+backend.log
+server.log
+
+# Old backup files
+fss_db_backup_*.sqlite
