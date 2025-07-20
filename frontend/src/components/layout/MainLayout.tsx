@@ -18,6 +18,34 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
+  const handleMenuClick = (key: string) => {
+    switch (key) {
+      case 'home':
+        window.location.href = '/';
+        break;
+      case 'search':
+        // 검색 섹션으로 스크롤
+        const searchElement = document.querySelector('.search-interface');
+        if (searchElement) {
+          searchElement.scrollIntoView({ behavior: 'smooth' });
+        }
+        break;
+      case 'analytics':
+        // 대시보드 섹션으로 스크롤
+        const dashboardElement = document.querySelector('.dashboard-section');
+        if (dashboardElement) {
+          dashboardElement.scrollIntoView({ behavior: 'smooth' });
+        }
+        break;
+      case 'laws':
+        alert('법령 조회 기능은 준비 중입니다.');
+        break;
+      case 'settings':
+        alert('설정 기능은 준비 중입니다.');
+        break;
+    }
+  };
+
   const menuItems = [
     {
       key: 'home',
@@ -59,6 +87,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           mode="horizontal"
           defaultSelectedKeys={['home']}
           items={menuItems}
+          onClick={({ key }) => handleMenuClick(key)}
           className="bg-transparent border-0 flex-1 justify-end"
           theme="light"
           style={{ 

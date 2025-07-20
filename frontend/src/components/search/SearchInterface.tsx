@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   Input, 
@@ -13,15 +13,18 @@ import {
   Divider,
   Select,
   DatePicker,
-  InputNumber
+  InputNumber,
+  Spin
 } from 'antd';
 import { 
   SearchOutlined, 
   FilterOutlined, 
   ClearOutlined,
   HistoryOutlined,
-  BulbOutlined
+  BulbOutlined,
+  LoadingOutlined
 } from '@ant-design/icons';
+import { searchService } from '@/lib/api';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -42,16 +45,38 @@ export default function SearchInterface({ onSearch }: SearchInterfaceProps) {
     minAmount: undefined,
     maxAmount: undefined,
   });
+  const [suggestions, setSuggestions] = useState<any>(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
-  // 검색 예시 제안
-  const searchSuggestions = [
-    "엔에이치아문디자산운용 제재 내역",
-    "10억원 이상 과징금 부과 사건",
-    "독립성 위반으로 징계받은 공인회계사",
-    "2024년 제재 의결 현황",
-    "회계처리 기준 위반 제재 현황",
-    "직무정지 처분을 받은 회계사"
+  // API에서 검색 제안 가져오기
+  useEffect(() => {
+    fetchSearchSuggestions();
+  }, []);
+
+  const fetchSearchSuggestions = async () => {
+    try {
+      setLoadingSuggestions(true);
+      const data = await searchService.getSearchSuggestions();
+      setSuggestions(data);
+      setLoadingSuggestions(false);
+    } catch (error) {
+      console.error('Failed to fetch suggestions:', error);
+      setLoadingSuggestions(false);
+    }
+  };
+
+  // 기본 검색 예시 제안 (폴백)
+  const defaultSuggestions = [
+    "신한은행 관련 제재 내역",
+    "1억원 이상 과징금 부과 사례",
+    "독립성 위반 사례를 찾아줘",
+    "2025년 제재 현황",
+    "회계처리 기준 위반 건",
+    "직무정지 처분을 받은 사례"
   ];
+
+  // 사용할 검색 제안
+  const searchSuggestions = suggestions?.common_queries || defaultSuggestions;
 
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
@@ -66,6 +91,10 @@ export default function SearchInterface({ onSearch }: SearchInterfaceProps) {
 
   const handleSuggestionClick = (suggestion: string) => {
     setSearchQuery(suggestion);
+    // 바로 검색 실행
+    setTimeout(() => {
+      onSearch?.(suggestion);
+    }, 100);
   };
 
   const clearFilters = () => {
@@ -83,7 +112,7 @@ export default function SearchInterface({ onSearch }: SearchInterfaceProps) {
   return (
     <div className="mb-8">
       {/* 메인 검색 영역 */}
-      <Card className="shadow-lg border-0">
+      <Card className="shadow-lg border-0 search-interface">
         <Row gutter={[24, 24]}>
           <Col span={24}>
             <Title level={2} className="text-center mb-6">
@@ -92,6 +121,22 @@ export default function SearchInterface({ onSearch }: SearchInterfaceProps) {
             <Text className="block text-center text-gray-600 mb-8">
               자연어로 질문하시면 AI가 관련 의결서를 찾아드립니다
             </Text>
+            {suggestions && (
+              <div className="text-center mb-4">
+                <Space wrap>
+                  {suggestions.basic_keywords?.slice(0, 5).map((keyword: string) => (
+                    <Tag 
+                      key={keyword} 
+                      color="blue" 
+                      className="cursor-pointer"
+                      onClick={() => handleSuggestionClick(keyword)}
+                    >
+                      {keyword}
+                    </Tag>
+                  ))}
+                </Space>
+              </div>
+            )}
           </Col>
           
           <Col span={24}>

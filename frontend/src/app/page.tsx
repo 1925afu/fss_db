@@ -34,47 +34,26 @@ export default function Home() {
         });
       }
       
-      setSearchResults(response.results || []);
+      // API 응답 구조에 따라 파싱
+      if (response.results && typeof response.results === 'object' && 'results' in response.results) {
+        // 중첩된 results 구조 처리
+        setSearchResults(response.results.results || []);
+      } else {
+        // 단일 results 구조 처리
+        setSearchResults(response.results || []);
+      }
       setLoading(false);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Search error:', error);
+      
+      // API 실패 시 더 자세한 에러 메시지 표시
+      const errorMessage = error.response?.data?.detail || error.message || '검색 중 오류가 발생했습니다.';
+      console.error('API Error details:', errorMessage);
+      
+      // 에러 발생 시 빈 결과 반환
+      setSearchResults([]);
       setLoading(false);
-      
-      // API 실패 시 임시 데이터 표시 (개발 중)
-      const mockResults = [
-        {
-          decision_id: 195,
-          decision_year: 2025,
-          title: '엔에이치아문디자산운용에 대한 정기검사 결과 조치안',
-          category_1: '제재',
-          category_2: '기관',
-          stated_purpose: '엔에이치아문디자산운용㈜에 대한 정기검사 결과 법규 위반사항에 대해 조치',
-          entity_name: '엔에이치아문디자산운용㈜',
-          industry_sector: '금융투자',
-          action_type: '과징금',
-          fine_amount: 7413000000, // 741.3백만원 = 74.13억원
-          violation_details: '신주인수권부사채 회계처리 기준 위반',
-        },
-        {
-          decision_id: 194,
-          decision_year: 2025,
-          title: '한국대성자산운용㈜에 대한 수시검사 결과 조치안',
-          category_1: '제재',
-          category_2: '기관',
-          stated_purpose: '한국대성자산운용㈜에 대한 수시검사 결과 법규 위반사항에 대해 조치',
-          entity_name: '한국대성자산운용㈜',
-          industry_sector: '금융투자',
-          action_type: '과태료',
-          fine_amount: 50000000, // 5천만원
-          violation_details: '내부통제 기준 위반',
-        }
-      ];
-      
-      setTimeout(() => {
-        setSearchResults(mockResults);
-        setLoading(false);
-      }, 500);
     }
   };
 
@@ -92,9 +71,11 @@ export default function Home() {
           />
         )}
         
-        {searchResults.length === 0 && !loading && (
+        {/* 대시보드는 항상 표시 */}
+        <div className="dashboard-section">
+          <h2 className="text-2xl font-bold mb-6">분석 대시보드</h2>
           <Dashboard />
-        )}
+        </div>
       </div>
     </MainLayout>
   );

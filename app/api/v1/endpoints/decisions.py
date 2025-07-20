@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+import os
 from app.core.database import get_db
 from app.models.fsc_models import Decision, Action, Law
 from app.services.decision_service import DecisionService
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -137,3 +140,65 @@ async def get_decision_laws(decision_year: int, decision_id: int, db: Session = 
     laws = service.get_laws_by_decision_composite_key(decision_year, decision_id)
     
     return laws
+
+
+@router.get("/{decision_year}/{decision_id}/download", summary="의결서 PDF 다운로드")
+async def download_decision_pdf(decision_year: int, decision_id: int, db: Session = Depends(get_db)):
+    """의결서 PDF 파일을 다운로드합니다."""
+    # 의결서 정보 조회
+    service = DecisionService(db)
+    decision = service.get_decision_by_composite_key(decision_year, decision_id)
+    
+    if not decision:
+        raise HTTPException(status_code=404, detail="의결서를 찾을 수 없습니다.")
+    
+    # PDF 파일 경로 생성
+    year_dir = os.path.join(settings.PROCESSED_PDF_DIR, str(decision_year))
+    
+    # source_file이 있는 경우 먼저 시도
+    if decision.source_file:
+        pdf_path = os.path.join(year_dir, decision.source_file)
+        if os.path.exists(pdf_path):
+            return FileResponse(
+                path=pdf_path,
+                filename=decision.source_file,
+                media_type="application/pdf"
+            )
+    
+    # source_file이 없거나 파일이 없는 경우, 패턴으로 검색
+    # 패턴: 금융위 의결서(제YYYY-XXX호)로 시작하는 파일
+    pattern = f"금융위 의결서(제{decision_year}-{decision_id}호)"
+    
+    if os.path.exists(year_dir):
+        for filename in os.listdir(year_dir):
+            if filename.startswith(pattern) and filename.endswith('.pdf'):
+                pdf_path = os.path.join(year_dir, filename)
+                return FileResponse(
+                    path=pdf_path,
+                    filename=filename,
+                    media_type="application/pdf"
+                )
+    
+    raise HTTPException(status_code=404, detail=f"PDF 파일을 찾을 수 없습니다. (패턴: {pattern})")
+
+
+@router.get("/{decision_year}/{decision_id}/companion-download", summary="의결 PDF 다운로드")
+async def download_companion_pdf(decision_year: int, decision_id: int, db: Session = Depends(get_db)):
+    """의결XXX.pdf 형식의 파일을 다운로드합니다."""
+    # PDF 파일 경로 생성
+    year_dir = os.path.join(settings.PROCESSED_PDF_DIR, str(decision_year))
+    
+    # 패턴: 의결XXX. 로 시작하는 파일
+    pattern = f"의결{decision_id}."
+    
+    if os.path.exists(year_dir):
+        for filename in os.listdir(year_dir):
+            if filename.startswith(pattern) and filename.endswith('.pdf'):
+                pdf_path = os.path.join(year_dir, filename)
+                return FileResponse(
+                    path=pdf_path,
+                    filename=filename,
+                    media_type="application/pdf"
+                )
+    
+    raise HTTPException(status_code=404, detail=f"의결 PDF 파일을 찾을 수 없습니다. (패턴: {pattern})")

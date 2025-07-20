@@ -12,13 +12,16 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS 설정
+# CORS 설정 - OPTIONS 요청 문제 해결
+# allow_credentials=True와 allow_origins=["*"]는 함께 사용할 수 없음
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # 프론트엔드 오리진 명시
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 모든 HTTP 메서드 허용
+    allow_headers=["*"],  # 모든 헤더 허용
+    expose_headers=["*"],
+    max_age=3600  # preflight 캐시 시간 설정
 )
 
 # API 라우터 등록

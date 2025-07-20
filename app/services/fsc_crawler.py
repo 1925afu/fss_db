@@ -222,7 +222,9 @@ class FSCCrawler:
             return None
     
     def extract_zip_files(self) -> List[str]:
-        """다운로드된 ZIP 파일들을 압축 해제합니다."""
+        """다운로드된 ZIP 파일들을 연도별로 분류하여 압축 해제합니다."""
+        import re
+        
         extracted_files = []
         
         # ZIP 파일 목록 확인
@@ -230,6 +232,17 @@ class FSCCrawler:
         
         for zip_file in zip_files:
             zip_path = os.path.join(self.raw_zip_dir, zip_file)
+            
+            # ZIP 파일명에서 연도 추출
+            year_match = re.search(r'(\d{4})년', zip_file)
+            if not year_match:
+                logger.warning(f"연도 추출 실패, 기본 폴더에 저장: {zip_file}")
+                year_dir = self.processed_pdf_dir
+            else:
+                year = year_match.group(1)
+                year_dir = os.path.join(self.processed_pdf_dir, year)
+                os.makedirs(year_dir, exist_ok=True)
+                logger.info(f"ZIP 파일 처리: {zip_file} -> {year}년 폴더")
             
             try:
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -239,19 +252,26 @@ class FSCCrawler:
                     # 의결서 PDF 파일만 추출
                     for file_name in file_list:
                         if file_name.endswith('.pdf') and '의결' in file_name:
-                            # 파일 추출
-                            zip_ref.extract(file_name, self.processed_pdf_dir)
+                            # 임시 위치에 파일 추출
+                            zip_ref.extract(file_name, year_dir)
                             
                             # 파일명 정리
-                            original_path = os.path.join(self.processed_pdf_dir, file_name)
+                            original_path = os.path.join(year_dir, file_name)
                             new_name = os.path.basename(file_name)
-                            new_path = os.path.join(self.processed_pdf_dir, new_name)
+                            new_path = os.path.join(year_dir, new_name)
                             
                             if original_path != new_path:
-                                os.rename(original_path, new_path)
+                                # 중간 디렉토리가 있는 경우 파일을 이동
+                                if os.path.dirname(file_name):
+                                    os.rename(original_path, new_path)
+                                    # 빈 디렉토리 정리
+                                    try:
+                                        os.rmdir(os.path.dirname(original_path))
+                                    except OSError:
+                                        pass  # 디렉토리가 비어있지 않으면 무시
                             
-                            extracted_files.append(new_name)
-                            logger.info(f"PDF 파일 추출 완료: {new_name}")
+                            extracted_files.append(f"{year if year_match else 'default'}/{new_name}")
+                            logger.info(f"PDF 파일 추출 완료: {year if year_match else 'default'}/{new_name}")
                 
             except Exception as e:
                 logger.error(f"ZIP 파일 압축 해제 실패: {zip_file} - {str(e)}")

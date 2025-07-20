@@ -45,11 +45,8 @@ async def natural_language_search(
         service = SearchService(db)
         results = await service.natural_language_search(request.query, request.limit)
         
-        return {
-            "query": request.query,
-            "results": results,
-            "count": len(results)
-        }
+        # results가 이미 딕셔너리 형태로 반환되므로 직접 반환
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"검색 중 오류가 발생했습니다: {str(e)}")
 

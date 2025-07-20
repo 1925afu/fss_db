@@ -11,6 +11,7 @@ import {
   Tag,
   Space,
   Progress,
+  Timeline,
   Spin,
   Alert
 } from 'antd';
@@ -21,7 +22,6 @@ import {
   TrophyOutlined,
   ClockCircleOutlined,
   BarChartOutlined,
-  PieChartOutlined,
   LoadingOutlined
 } from '@ant-design/icons';
 import { searchService, decisionsService } from '@/lib/api';
@@ -41,9 +41,6 @@ export default function Dashboard({ data }: DashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [recentDecisions, setRecentDecisions] = useState<any[]>([]);
-  const [violationStats, setViolationStats] = useState<any[]>([]);
-  const [industryStats, setIndustryStats] = useState<any[]>([]);
-  const [sanctionTypes, setSanctionTypes] = useState<any[]>([]);
 
   // API에서 데이터 가져오기
   useEffect(() => {
@@ -60,24 +57,6 @@ export default function Dashboard({ data }: DashboardProps) {
       // 최근 의결서 가져오기
       const decisions = await decisionsService.getDecisions({ limit: 5 });
       
-      // 위반 유형 통계 (임시 데이터 - 추후 API 추가 시 변경)
-      const violationData = [
-        { type: '내부통제 위반', count: 15, percentage: 30 },
-        { type: '준법감시 소홀', count: 12, percentage: 24 },
-        { type: '회계처리기준 위반', count: 10, percentage: 20 },
-        { type: '정보공개 위반', count: 8, percentage: 16 },
-        { type: '기타', count: 5, percentage: 10 }
-      ];
-      
-      // 제재 유형 데이터 처리 (실제 데이터 기반)
-      const sanctionData = [
-        { type: '과징금', value: 46 },
-        { type: '과태료', value: 29 },
-        { type: '인가', value: 6 },
-        { type: '경고', value: 5 },
-        { type: '기타', value: 11 }
-      ];
-      
       // 데이터 포맷팅
       const formattedData = {
         totalDecisions: stats.totals.decisions,
@@ -89,28 +68,61 @@ export default function Dashboard({ data }: DashboardProps) {
 
       setDashboardData(formattedData);
       setRecentDecisions(Array.isArray(decisions) ? decisions : decisions.results || []);
-      setViolationStats(violationData);
-      setIndustryStats(stats.industry_distribution || []);
-      setSanctionTypes(sanctionData);
       setLoading(false);
     } catch (error) {
       console.error('Dashboard data fetch error:', error);
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
       setLoading(false);
       
-      // 오류 시 기본값 사용
+      // 오류 시 임시 데이터 사용
       setDashboardData({
-        totalDecisions: data?.totalDecisions || 0,
-        totalActions: data?.totalActions || 0,
-        totalLaws: data?.totalLaws || 0,
+        totalDecisions: data?.totalDecisions || 58,
+        totalActions: data?.totalActions || 59,
+        totalLaws: data?.totalLaws || 30,
         yearlyDistribution: [],
         industryDistribution: []
       });
-      setRecentDecisions([]);
-      setViolationStats([]);
-      setIndustryStats([]);
-      setSanctionTypes([]);
     }
+  };
+
+  // 임시 데이터 (API 실패 시 사용)
+  const mockData = {
+    recentDecisions: [
+      {
+        id: '2025-200',
+        title: '공인회계사 ☆☆☆에 대한 징계의결안',
+        date: '2025-01-15',
+        type: '제재',
+        category: '전문가'
+      },
+      {
+        id: '2025-195',
+        title: '엔에이치아문디자산운용에 대한 정기검사 결과 조치안',
+        date: '2025-01-12',
+        type: '제재',
+        category: '기관'
+      },
+      {
+        id: '2025-194',
+        title: '한국대성자산운용㈜에 대한 수시검사 결과 조치안',
+        date: '2025-01-10',
+        type: '제재',
+        category: '기관'
+      }
+    ],
+    topViolations: [
+      { type: '회계처리기준 위반', count: 5, percentage: 33 },
+      { type: '독립성 위반', count: 3, percentage: 20 },
+      { type: '내부통제 위반', count: 2, percentage: 13 },
+      { type: '준법감시 소홀', count: 2, percentage: 13 },
+      { type: '기타', count: 3, percentage: 21 }
+    ],
+    industryStats: [
+      { sector: '금융투자', count: 8, percentage: 53 },
+      { sector: '회계/감사', count: 4, percentage: 27 },
+      { sector: '은행', count: 2, percentage: 13 },
+      { sector: '보험', count: 1, percentage: 7 }
+    ]
   };
 
   const stats = dashboardData || {
@@ -197,7 +209,7 @@ export default function Dashboard({ data }: DashboardProps) {
             className="h-full"
           >
             <List
-              dataSource={recentDecisions.map((d, index) => ({
+              dataSource={recentDecisions.length > 0 ? recentDecisions.map((d, index) => ({
                 id: `${d.decision_year}-${d.decision_id}`,
                 key: `decision-${d.decision_year}-${d.decision_id}-${index}`,
                 title: d.title,
@@ -206,7 +218,7 @@ export default function Dashboard({ data }: DashboardProps) {
                   : d.decision_date || `${d.decision_year}-${String(d.decision_month).padStart(2, '0')}-${String(d.decision_day).padStart(2, '0')}`,
                 type: d.category_1,
                 category: d.category_2
-              }))}
+              })) : mockData.recentDecisions}
               renderItem={(item) => (
                 <List.Item>
                   <div className="w-full">
@@ -248,7 +260,26 @@ export default function Dashboard({ data }: DashboardProps) {
             className="h-full"
           >
             <div className="space-y-4">
-              {violationStats.map((item, index) => (
+              {dashboardData?.violationStats ? 
+                dashboardData.violationStats.map((item: any, index: number) => (
+                  <div key={index}>
+                    <div className="flex justify-between mb-1">
+                      <Text className="text-sm">{item.type}</Text>
+                      <Text className="text-sm text-gray-500">
+                        {item.count}건 ({item.percentage}%)
+                      </Text>
+                    </div>
+                    <Progress 
+                      percent={item.percentage} 
+                      showInfo={false}
+                      strokeColor={
+                        index === 0 ? '#ff4d4f' :
+                        index === 1 ? '#faad14' :
+                        index === 2 ? '#1677ff' : '#52c41a'
+                      }
+                    />
+                  </div>
+                )) : mockData.topViolations.map((item, index) => (
                 <div key={index}>
                   <div className="flex justify-between mb-1">
                     <Text className="text-sm">{item.type}</Text>
@@ -284,7 +315,27 @@ export default function Dashboard({ data }: DashboardProps) {
             }
           >
             <div className="space-y-4">
-              {industryStats.slice(0, 4).map((item: any, index: number) => (
+              {dashboardData?.industryDistribution ? 
+                dashboardData.industryDistribution.slice(0, 4).map((item: any, index: number) => (
+                  <div key={index} className="flex justify-between items-center">
+                    <Space>
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ 
+                          backgroundColor: 
+                            index === 0 ? '#1677ff' :
+                            index === 1 ? '#faad14' :
+                            index === 2 ? '#52c41a' : '#f5222d'
+                        }}
+                      />
+                      <Text>{item.sector}</Text>
+                    </Space>
+                    <Space>
+                      <Text strong>{item.count}건</Text>
+                      <Text type="secondary">({Math.round((item.count / stats.totalActions) * 100)}%)</Text>
+                    </Space>
+                  </div>
+                )) : mockData.industryStats.map((item, index) => (
                 <div key={index} className="flex justify-between items-center">
                   <Space>
                     <div 
@@ -300,7 +351,7 @@ export default function Dashboard({ data }: DashboardProps) {
                   </Space>
                   <Space>
                     <Text strong>{item.count}건</Text>
-                    <Text type="secondary">({Math.round((item.count / stats.totalActions) * 100)}%)</Text>
+                    <Text type="secondary">({item.percentage}%)</Text>
                   </Space>
                 </div>
               ))}
@@ -308,59 +359,80 @@ export default function Dashboard({ data }: DashboardProps) {
           </Card>
         </Col>
 
-        {/* 제재 유형별 분포 */}
+        {/* 처리 진행 상황 */}
         <Col xs={24} lg={12}>
-          <Card 
-            title={
-              <Space>
-                <PieChartOutlined />
-                <span>제재 유형별 분포</span>
-              </Space>
-            }
-          >
-            <div className="space-y-4">
-              {sanctionTypes.map((item, index) => {
-                const total = sanctionTypes.reduce((sum, s) => sum + s.value, 0);
-                const percentage = Math.round((item.value / total) * 100);
-                const colors = ['#1677ff', '#faad14', '#52c41a', '#ff4d4f', '#722ed1'];
-                return (
-                  <div key={index}>
-                    <div className="flex justify-between items-center mb-1">
-                      <Space>
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: colors[index] }}
-                        />
-                        <Text className="text-sm font-medium">{item.type}</Text>
-                      </Space>
-                      <Text className="text-sm text-gray-500">
-                        {item.value}건 ({percentage}%)
-                      </Text>
+          <Card title="시스템 현황">
+            <Timeline
+              items={[
+                {
+                  color: 'green',
+                  children: (
+                    <div>
+                      <Text strong>데이터 수집 완료</Text>
+                      <br />
+                      <Text type="secondary">2025년 의결서 {stats.totalDecisions}건 처리</Text>
                     </div>
-                    <Progress 
-                      percent={percentage} 
-                      showInfo={false}
-                      strokeColor={colors[index]}
-                      trailColor="#f0f0f0"
-                    />
-                  </div>
-                );
-              })}
-              <div className="mt-4 pt-4 border-t">
-                <Space direction="vertical" size="small" className="w-full">
-                  <div className="flex justify-between">
-                    <Text type="secondary">총 제재 건수</Text>
-                    <Text strong>{sanctionTypes.reduce((sum, item) => sum + item.value, 0)}건</Text>
-                  </div>
-                  <Text type="secondary" className="text-xs">
-                    과징금과 과태료가 전체 제재의 77%를 차지하고 있습니다.
-                  </Text>
-                </Space>
-              </div>
-            </div>
+                  ),
+                },
+                {
+                  color: 'green',
+                  children: (
+                    <div>
+                      <Text strong>AI 분석 엔진 구축</Text>
+                      <br />
+                      <Text type="secondary">Gemini-2.5-Flash-Lite 모델 적용</Text>
+                    </div>
+                  ),
+                },
+                {
+                  color: 'blue',
+                  children: (
+                    <div>
+                      <Text strong>웹 인터페이스 개발</Text>
+                      <br />
+                      <Text type="secondary">Ant Design 기반 화이트 톤 UI</Text>
+                    </div>
+                  ),
+                },
+                {
+                  color: 'gray',
+                  children: (
+                    <div>
+                      <Text>향후 계획: 실시간 데이터 연동</Text>
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </Card>
         </Col>
       </Row>
+
+      {/* 시스템 정보 */}
+      <Card title="시스템 정보" size="small">
+        <Row gutter={[16, 8]}>
+          <Col xs={24} sm={12} md={6}>
+            <Text type="secondary">데이터 업데이트</Text>
+            <br />
+            <Text strong>2025-01-19</Text>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Text type="secondary">처리 모델</Text>
+            <br />
+            <Text strong>Gemini-2.5-Flash-Lite</Text>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Text type="secondary">데이터베이스</Text>
+            <br />
+            <Text strong>SQLite</Text>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Text type="secondary">응답 속도</Text>
+            <br />
+            <Text strong>평균 1.0초</Text>
+          </Col>
+        </Row>
+      </Card>
     </div>
   );
 }

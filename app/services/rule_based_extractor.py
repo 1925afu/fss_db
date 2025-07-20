@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import sys
 import os
+import PyPDF2
 
 # 상위 디렉토리의 모듈 임포트를 위해 경로 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -24,8 +25,8 @@ class RuleBasedExtractor:
             'decision_number': r'제(\d{4})-(\d+)호',
             'decision_date': r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일',
             
-            # 근거법규 섹션 패턴 (더 유연하게)
-            'law_section': r'나\.\s*근거법규(.*?)(?=다\.|라\.|마\.|바\.|사\.|아\.|자\.|차\.|카\.|타\.|파\.|하\.|$)',
+            # 근거법규 섹션 패턴 (숫자와 한글 기호 모두 지원)
+            'law_section': r'(?:\d+\.|[가-하]\.)\s*근거법규(.*?)(?=\d+\.|[가-하]\.|$)',
             
             # 법률명과 조항 패턴
             'law_with_articles': r'[｢「]([^｣」]+)[｣」]\s*([^｢「\n]+?)(?=[｢「]|$|\n\s*\n)',
@@ -46,8 +47,12 @@ class RuleBasedExtractor:
                 '회계/감사': ['회계법인', '감사', '회계사']
             },
             
-            # 조치 이유 섹션 패턴
-            'violation_section': r'가\.\s*지적사항(.*?)(?=나\.|라\.|마\.|바\.|사\.|아\.|자\.|차\.|카\.|타\.|파\.|하\.|$)',
+            # 조치 이유 섹션 패턴 (더 견고한 패턴)
+            'violation_section': [
+                r'가\.([^나다라마바사아자차카타파하]*?)(?=나\.|\d+\.|$)',  # 가. ~ 나./숫자. 까지
+                r'가\.([^가-하]*?)(?=[나-하]\.|\d+\.|$)',  # 가. ~ 다른 한글 기호까지
+                r'가\.(.{10,}?)(?=(?:[나-하]\.|\d+\.|4\.|5\.|6\.|7\.|8\.|9\.))',  # 최소 10자 이상
+            ],
             
             # 조치대상자 정보 패턴
             'target_info_section': r'1\.\s*조치대상자의\s*인적사항(.*?)(?=2\.|$)',
@@ -69,16 +74,8 @@ class RuleBasedExtractor:
                 metadata['decision_year'] = int(filename_match.group(1))
                 metadata['decision_id'] = int(filename_match.group(2))
             
-            # 텍스트에서 의결일자 추출
-            date_match = re.search(self.patterns['decision_date'], text)
-            if date_match:
-                year = int(date_match.group(1))
-                month = int(date_match.group(2))
-                day = int(date_match.group(3))
-                
-                metadata['decision_year'] = year
-                metadata['decision_month'] = month
-                metadata['decision_day'] = day
+            # 의결서 PDF에는 날짜 정보가 없으므로 기본값 사용
+            # 실제 날짜는 나중에 의결*.pdf 파일에서 추출
             
             # 제목 추출 (파일명에서)
             title_match = re.search(r'_([^_]+?)(?:\(공개용\))?\.pdf$', filename)
@@ -88,8 +85,8 @@ class RuleBasedExtractor:
             # 기본값 설정
             metadata.setdefault('decision_year', 2024)
             metadata.setdefault('decision_id', 1)
-            metadata.setdefault('decision_month', 1)
-            metadata.setdefault('decision_day', 1)
+            metadata.setdefault('decision_month', 0)  # 0 = 날짜 정보 없음
+            metadata.setdefault('decision_day', 0)  # 0 = 날짜 정보 없음
             metadata.setdefault('title', '')
             
             # 의안번호 생성
@@ -124,36 +121,22 @@ class RuleBasedExtractor:
             law_section_text = law_section_match.group(1)
             logger.info(f"근거법규 섹션 발견: {law_section_text[:100]}...")
             
-            # 법률명과 조항을 함께 추출 (개선된 방식)
-            # 각 줄을 개별적으로 처리하여 모든 법률을 잡아냄
-            lines = law_section_text.split('\n')
+            # 법률명과 조항을 함께 추출 (줄바꿈 무시하고 전체 텍스트에서 추출)
+            # 줄바꿈과 불필요한 공백 정리
+            cleaned_text = re.sub(r'\s+', ' ', law_section_text.strip())
             
-            for line in lines:
-                line = line.strip()
-                if not line or not '｢' in line:
+            # 법률명 패턴으로 모든 매칭 찾기
+            law_matches = re.finditer(r'[｢「]([^｣」]+)[｣」]\s*([^｢「]*?)(?=[｢「]|$)', cleaned_text)
+            
+            for match in law_matches:
+                law_name = match.group(1).strip()
+                article_text = match.group(2).strip()
+                
+                if not law_name:
                     continue
-                    
-                # 법률명 추출
-                law_name_match = re.search(r'[｢「]([^｣」]+)[｣」]', line)
-                if not law_name_match:
-                    continue
-                    
-                law_name = law_name_match.group(1).strip()
                 
                 # 법률명 정규화
                 normalized_law_name = self.law_normalizer.normalize_law_name(law_name)
-                
-                # 법률명 뒤의 조항 텍스트 추출 (개행 포함하여 다음 줄까지)
-                law_name_end = law_name_match.end()
-                article_text = line[law_name_end:].strip()
-                
-                # 다음 줄도 조항 정보일 수 있으므로 확인
-                current_line_index = lines.index(line)
-                if current_line_index + 1 < len(lines):
-                    next_line = lines[current_line_index + 1].strip()
-                    # 다음 줄이 조항 정보인지 확인 (제XX조로 시작하면 연결)
-                    if next_line and re.search(r'제\d+조', next_line) and not '｢' in next_line:
-                        article_text += ", " + next_line
                 
                 logger.info(f"전체 조항 텍스트: {article_text}")
                 
@@ -560,17 +543,34 @@ class RuleBasedExtractor:
         return None
     
     def extract_violation_full_text(self, text: str) -> str:
-        """조치 이유 전문 추출 (가. 지적사항 섹션)"""
+        """조치 이유 전문 추출 (가. 지적사항 섹션) - 여러 패턴 시도"""
         try:
-            violation_match = re.search(self.patterns['violation_section'], text, re.DOTALL | re.IGNORECASE)
+            # 여러 패턴을 순서대로 시도
+            for i, pattern in enumerate(self.patterns['violation_section']):
+                violation_match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+                
+                if violation_match:
+                    violation_text = violation_match.group(1).strip()
+                    if len(violation_text) > 10:  # 최소 길이 체크
+                        logger.info(f"위반 전문 텍스트 추출 성공 (패턴 {i+1}): {len(violation_text)}자")
+                        return violation_text
             
-            if violation_match:
-                violation_text = violation_match.group(1).strip()
-                logger.info(f"위반 전문 텍스트 추출 성공: {len(violation_text)}자")
-                return violation_text
-            else:
-                logger.warning("위반 전문 텍스트를 찾을 수 없습니다.")
-                return ""
+            # 모든 패턴 실패 시 fallback - 간단한 "가." 이후 텍스트 추출
+            fallback_match = re.search(r'가\.(.{20,})', text, re.DOTALL | re.IGNORECASE)
+            if fallback_match:
+                violation_text = fallback_match.group(1).strip()
+                # 다음 섹션에서 자르기
+                for separator in ['나.', '다.', '라.', '4.', '5.', '근거법규']:
+                    if separator in violation_text:
+                        violation_text = violation_text[:violation_text.find(separator)].strip()
+                        break
+                
+                if len(violation_text) > 10:
+                    logger.info(f"위반 전문 텍스트 fallback 추출 성공: {len(violation_text)}자")
+                    return violation_text
+            
+            logger.warning("위반 전문 텍스트를 찾을 수 없습니다.")
+            return ""
         except Exception as e:
             logger.error(f"위반 전문 텍스트 추출 실패: {e}")
             return ""
@@ -1001,10 +1001,26 @@ class RuleBasedExtractor:
                     logger.info("기관경고 조치 추출")
                 
                 # 2. 과태료 금액 추출 (수정안에서 마지막 과태료 금액 찾기)
+                # 공백을 포함한 더 정확한 패턴 사용
                 fine_matches = re.findall(r'과태료\s*([\d,]+)\s*백만원', revision_text)
                 if fine_matches:
-                    # 마지막 매치가 수정안의 금액
-                    amount = int(fine_matches[-1].replace(',', '')) * 1000000
+                    # 감경 금액이 아닌 실제 과태료 금액만 추출
+                    # "감경(XXX백만원" 패턴은 제외
+                    valid_amounts = []
+                    for i, match in enumerate(fine_matches):
+                        # 해당 매치 주변 텍스트 확인
+                        start_pos = revision_text.find(match)
+                        if start_pos > 0:
+                            context = revision_text[max(0, start_pos-20):start_pos+50]
+                            if '감경(' not in context:
+                                valid_amounts.append(match)
+                    
+                    if valid_amounts:
+                        # 마지막 유효한 매치가 수정안의 금액
+                        amount = int(valid_amounts[-1].replace(',', '')) * 1000000
+                    else:
+                        # 유효한 금액이 없으면 원래 로직 사용
+                        amount = int(fine_matches[-1].replace(',', '')) * 1000000
                     actions.append({
                         'action_type': '과태료',
                         'fine_amount': amount,
@@ -1235,3 +1251,86 @@ class RuleBasedExtractor:
             return '임직원'
         else:
             return '기타'
+    
+    def extract_date_from_companion_file(self, decision_year: int, decision_id: int, processed_pdf_dir: str) -> Optional[Tuple[int, int, int]]:
+        """의결XXX.pdf 파일에서 날짜 정보를 추출합니다."""
+        try:
+            # 연도별 디렉토리 경로
+            year_dir = os.path.join(processed_pdf_dir, str(decision_year))
+            if not os.path.exists(year_dir):
+                logger.warning(f"연도 디렉토리가 없습니다: {year_dir}")
+                return None
+            
+            # 의결XXX. 형식의 파일 찾기
+            pattern = f'의결{decision_id:03d}\\.'  # 의결048. 형식
+            companion_file = None
+            
+            for filename in os.listdir(year_dir):
+                if re.match(pattern, filename) and filename.endswith('.pdf'):
+                    companion_file = filename
+                    break
+            
+            if not companion_file:
+                # 3자리가 아닌 경우도 시도 (의결48. 형식)
+                pattern = f'의결{decision_id}\\.'
+                for filename in os.listdir(year_dir):
+                    if re.match(pattern, filename) and filename.endswith('.pdf'):
+                        companion_file = filename
+                        break
+            
+            if not companion_file:
+                logger.debug(f"의결{decision_id}번에 해당하는 의결*.pdf 파일을 찾을 수 없습니다.")
+                return None
+            
+            # PDF에서 날짜 추출
+            pdf_path = os.path.join(year_dir, companion_file)
+            date_info = self._extract_date_from_pdf(pdf_path)
+            
+            if date_info:
+                logger.info(f"날짜 추출 성공: {decision_year}-{decision_id}호 -> {date_info[0]}년 {date_info[1]}월 {date_info[2]}일")
+                return date_info
+            else:
+                logger.warning(f"날짜 추출 실패: {companion_file}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"의결 파일에서 날짜 추출 중 오류: {e}")
+            return None
+    
+    def _extract_date_from_pdf(self, pdf_path: str) -> Optional[Tuple[int, int, int]]:
+        """PDF 파일에서 의결일자를 추출합니다."""
+        try:
+            with open(pdf_path, 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                text = ''
+                # 첫 3페이지만 읽어서 날짜 정보 추출
+                for page_num, page in enumerate(reader.pages[:3]):
+                    text += page.extract_text()
+            
+            # 날짜 패턴들 (update_decision_dates.py에서 가져옴)
+            date_patterns = [
+                # 의결연월일 2025. 3.19. (제5차) 패턴
+                r'의결\s*연월일\s*(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.\s*\(제(\d+)차\)',
+                # 의결일: 2025. 1. 8
+                r'의결일\s*[:：]\s*(\d{4})[\.\년]\s*(\d{1,2})[\.\월]\s*(\d{1,2})',
+                # 의결일자: 2025년 1월 8일
+                r'의결일자\s*[:：]\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일',
+                # 2025년 1월 8일 (문서 상단에 있는 경우)
+                r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일.*?의결',
+                # 2025. 1. 8. (일반 날짜 형식)
+                r'(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.',
+            ]
+            
+            for pattern in date_patterns:
+                match = re.search(pattern, text[:1000])  # 문서 앞부분에서만 검색
+                if match:
+                    year = int(match.group(1))
+                    month = int(match.group(2))
+                    day = int(match.group(3))
+                    return (year, month, day)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"PDF 텍스트 추출 실패 {pdf_path}: {e}")
+            return None

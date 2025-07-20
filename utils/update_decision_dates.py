@@ -75,43 +75,53 @@ def match_decision_files(processed_pdf_dir):
     """의결 파일과 금융위 의결서 파일을 매칭합니다."""
     matches = []
     
-    # 모든 의결*.pdf 파일 찾기
-    decision_files = [f for f in os.listdir(processed_pdf_dir) if f.startswith('의결') and f.endswith('.pdf')]
-    
-    for decision_file in decision_files:
-        decision_number = get_decision_number_from_filename(decision_file)
-        entity_name = get_entity_name_from_filename(decision_file)
-        
-        if not decision_number:
+    # 연도별 디렉토리 순회
+    for year_dir in os.listdir(processed_pdf_dir):
+        year_path = os.path.join(processed_pdf_dir, year_dir)
+        if not os.path.isdir(year_path) or not year_dir.isdigit():
             continue
+            
+        # 해당 연도 디렉토리에서 의결*.pdf 파일 찾기
+        decision_files = [f for f in os.listdir(year_path) if f.startswith('의결') and f.endswith('.pdf')]
+    
+        for decision_file in decision_files:
+            decision_number = get_decision_number_from_filename(decision_file)
+            entity_name = get_entity_name_from_filename(decision_file)
+            
+            if not decision_number:
+                continue
+            
+            # 매칭되는 금융위 의결서 파일 찾기
+            # 패턴: 금융위 의결서(제YYYY-X호)_...
+            pattern = f'금융위 의결서\\(제{year_dir}-{decision_number}호\\)'
+            
+            matching_files = [f for f in os.listdir(year_path) 
+                             if re.search(pattern, f) and f.endswith('.pdf')]
         
-        # 매칭되는 금융위 의결서 파일 찾기
-        # 패턴: 금융위 의결서(제2025-X호)_...
-        pattern = f'금융위 의결서\\(제\\d{{4}}-{decision_number}호\\)'
-        
-        matching_files = [f for f in os.listdir(processed_pdf_dir) 
-                         if re.search(pattern, f) and f.endswith('.pdf')]
-        
-        if matching_files:
-            # 기관명으로 추가 검증
-            if entity_name:
-                for mf in matching_files:
-                    if entity_name in mf:
-                        matches.append({
-                            'decision_file': decision_file,
-                            'fsc_file': mf,
-                            'decision_number': decision_number,
-                            'entity_name': entity_name
-                        })
-                        break
-            else:
-                # 기관명이 없으면 첫 번째 매칭 사용
-                matches.append({
-                    'decision_file': decision_file,
-                    'fsc_file': matching_files[0],
-                    'decision_number': decision_number,
-                    'entity_name': entity_name or ''
-                })
+            if matching_files:
+                # 기관명으로 추가 검증
+                if entity_name:
+                    for mf in matching_files:
+                        if entity_name in mf:
+                            matches.append({
+                                'decision_file': decision_file,
+                                'fsc_file': mf,
+                                'decision_number': decision_number,
+                                'entity_name': entity_name,
+                                'year': year_dir,
+                                'year_path': year_path
+                            })
+                            break
+                else:
+                    # 기관명이 없으면 첫 번째 매칭 사용
+                    matches.append({
+                        'decision_file': decision_file,
+                        'fsc_file': matching_files[0],
+                        'decision_number': decision_number,
+                        'entity_name': entity_name or '',
+                        'year': year_dir,
+                        'year_path': year_path
+                    })
     
     return matches
 
@@ -130,7 +140,7 @@ def update_database_dates(db_path, processed_pdf_dir):
     
     for match in matches:
         decision_number = match['decision_number']
-        decision_file_path = os.path.join(processed_pdf_dir, match['decision_file'])
+        decision_file_path = os.path.join(match['year_path'], match['decision_file'])
         
         # 의결 파일에서 실제 날짜 추출
         pdf_text = read_pdf_text(decision_file_path)

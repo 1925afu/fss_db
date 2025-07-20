@@ -53,44 +53,53 @@ The system uses a PostgreSQL database with four main tables:
 - **Python** libraries: requests, BeautifulSoup4 for web scraping
 - **File system** storage for raw ZIP and processed PDF files
 
-## Key File Structure (Planned)
-
-Based on the architecture document, the expected file structure will be:
+## Key File Structure (Actual)
 
 ```
 ./
+├── app/
+│   ├── api/v1/endpoints/     # API endpoints
+│   ├── core/                 # Core settings and database
+│   ├── models/              # Database models (SQLAlchemy)
+│   └── services/            # Business logic
+│       ├── fsc_crawler.py   # FSC website crawler
+│       ├── pdf_processor.py # PDF processing orchestrator
+│       ├── rule_based_extractor.py # Pattern-based extraction
+│       └── gemini_service.py # AI enhancement service
 ├── data/
-│   ├── raw_zip/          # Downloaded ZIP files
-│   └── processed_pdf/    # Extracted PDF files
-├── crawler.py            # FSC website crawler
-├── process.py           # Main PDF processing script
-├── prompt_extractor.txt  # AI prompt for data extraction
-├── prompt_validator.txt  # AI prompt for data validation
-└── backend/             # FastAPI application
-    └── frontend/        # Next.js web interface
+│   ├── raw_zip/             # Downloaded ZIP files (2021-2025)
+│   └── processed_pdf/       # Extracted PDF files by year
+├── prompts/                 # AI prompts
+├── scripts/                 # Utility scripts
+├── process_*.py             # Various batch processing scripts
+└── verify_db_data*.py       # Data validation scripts
 ```
 
 ## Development Workflow
 
-### Data Pipeline Development
-1. Implement FSC crawler to download decision documents
-2. Create PDF processing pipeline with Gemini API integration
-3. Set up PostgreSQL database with the defined schema
-4. Implement data validation and insertion logic
+### Data Pipeline Development (Completed)
+1. ✅ FSC crawler implementation - Downloads 2021-2025 decision documents (2,000+ files)
+2. ✅ Hybrid PDF processing pipeline - Rule-based (95%+ accuracy) + Gemini API for complex cases
+3. ✅ SQLite database with composite key schema (decision_year + decision_id)
+4. ✅ Data validation and batch processing with session management
 
-### Query System Development
-1. Develop FastAPI backend with SQLAlchemy ORM
-2. Implement NL2SQL engine using LangChain
-3. Create Next.js frontend with search interface
-4. Add data visualization components
+### Query System Development (In Progress)
+1. ✅ FastAPI backend with SQLAlchemy ORM - Basic structure implemented
+2. 🚧 NL2SQL engine using LangChain - Planned
+3. 🚧 Next.js frontend with search interface - In development
+4. 📋 Data visualization components - Planned
 
 ## Key Components
 
-### PDF Processing Pipeline
-- Extract text from FSC decision PDFs
-- Use Gemini API to structure data according to database schema
-- Validate extracted data with AI verification
-- Insert validated data into PostgreSQL with transactions
+### PDF Processing Pipeline (Hybrid Approach)
+- **Rule-based Extraction** (Primary): Regex patterns for Korean legal document standards
+  - 95%+ accuracy for standard fields (decision number, dates, amounts, entity names)
+  - Handles complex multi-action cases and table formats
+- **AI Enhancement** (Secondary): Gemini API for complex cases
+  - 2-step pipeline for documents that fail rule-based extraction
+  - Complex violation summaries and categorization
+- **Batch Processing**: Session management for SQLite transactions
+- **Data Validation**: Comparison with original PDF text
 
 ### Natural Language Query System
 - Process user queries in Korean
@@ -118,8 +127,18 @@ Based on the architecture document, the expected file structure will be:
 
 This is a PoC system focused on:
 - One-time data loading from FSC decision documents
-- AI-powered data extraction and validation
+- **Hybrid extraction approach**: Rule-based (primary) + AI-powered (secondary)
 - Complex NL2SQL capabilities for regulatory analysis
 - Korean language support for natural language queries
 
-The system emphasizes data accuracy through AI validation and supports complex regulatory trend analysis through sophisticated query capabilities.
+### Current Status (2025년 7월)
+- **Data Collection**: 2,000+ FSC decision PDFs (2021-2025) downloaded
+- **Data Processing**: 58/83 files processed for 2025 (69.9% completion)
+- **Extraction Accuracy**: 95%+ with rule-based patterns
+- **Database**: 58 decisions, 59 actions, 30 laws successfully stored
+- **API Limitation**: Daily quota reached (250 requests for Gemini free tier)
+
+### Known Issues
+- **Complex PDFs**: Files 2025-54호 and 2025-94호 timeout due to complexity
+- **Session Management**: SQLite transaction handling requires careful session management
+- **API Rate Limits**: Gemini free tier limits require batch processing strategies

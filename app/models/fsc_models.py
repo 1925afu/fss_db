@@ -39,6 +39,9 @@ class Decision(Base):
     def decision_date(self):
         """기존 코드 호환성을 위한 date 프로퍼티"""
         from datetime import date
+        # 날짜 정보가 없는 경우 None 반환
+        if self.decision_month == 0 or self.decision_day == 0:
+            return None
         return date(self.decision_year, self.decision_month, self.decision_day)
     
     @decision_date.setter

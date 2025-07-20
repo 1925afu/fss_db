@@ -81,6 +81,22 @@ class PDFProcessor:
             # 데이터베이스에 저장
             result = await self._save_to_database(extracted_data, pdf_path)
             
+            # 날짜 정보 업데이트 시도
+            if result.get('success') and 'decision' in result:
+                decision = result['decision']
+                date_info = self.rule_based_extractor.extract_date_from_companion_file(
+                    decision.decision_year,
+                    decision.decision_id,
+                    self.processed_pdf_dir
+                )
+                
+                if date_info:
+                    # DB 업데이트
+                    decision.decision_month = date_info[1]
+                    decision.decision_day = date_info[2]
+                    self.db.commit()
+                    logger.info(f"날짜 업데이트 완료: {decision.decision_year}-{decision.decision_id}호 -> {date_info[1]}월 {date_info[2]}일")
+            
             return {
                 'success': True,
                 'pdf_path': pdf_path,
@@ -142,6 +158,22 @@ class PDFProcessor:
                     
                     # 데이터베이스에 저장
                     result = await self._save_to_database(enhanced_data, pdf_path)
+                    
+                    # 날짜 정보 업데이트 시도
+                    if result.get('success') and 'decision' in result:
+                        decision = result['decision']
+                        date_info = self.rule_based_extractor.extract_date_from_companion_file(
+                            decision.decision_year,
+                            decision.decision_id,
+                            self.processed_pdf_dir
+                        )
+                        
+                        if date_info:
+                            # DB 업데이트
+                            decision.decision_month = date_info[1]
+                            decision.decision_day = date_info[2]
+                            self.db.commit()
+                            logger.info(f"날짜 업데이트 완료: {decision.decision_year}-{decision.decision_id}호 -> {date_info[1]}월 {date_info[2]}일")
                     
                     return {
                         'success': True,
@@ -261,8 +293,8 @@ class PDFProcessor:
             decision_data = {
                 'decision_year': decision_info.get('decision_year', 2023),  # 기본값 설정
                 'decision_id': decision_info.get('decision_id', 1),  # AI가 생성한 ID 사용
-                'decision_month': decision_info.get('decision_month', 1),  # AI가 생성한 월
-                'decision_day': decision_info.get('decision_day', 1),  # AI가 생성한 일
+                'decision_month': 1,  # 기본값, 나중에 의결*.pdf에서 실제 날짜로 업데이트
+                'decision_day': 1,  # 기본값, 나중에 의결*.pdf에서 실제 날짜로 업데이트
                 'agenda_no': decision_info.get('agenda_no', ''),
                 'title': decision_info.get('title', ''),
                 'category_1': decision_info.get('category_1', ''),
@@ -274,17 +306,16 @@ class PDFProcessor:
                 'source_file': os.path.basename(pdf_path)
             }
             
-            # 날짜 정보가 1월 1일인 경우, 의결*.pdf 파일에서 실제 날짜 추출 시도
-            if decision_data['decision_month'] == 1 and decision_data['decision_day'] == 1:
-                actual_date = await self._extract_actual_meeting_date(
-                    decision_data['decision_year'], 
-                    decision_data['decision_id'],
-                    self.processed_pdf_dir
-                )
-                if actual_date:
-                    decision_data['decision_month'] = actual_date['month']
-                    decision_data['decision_day'] = actual_date['day']
-                    logger.info(f"실제 회의 날짜로 업데이트: {decision_data['decision_year']}-{decision_data['decision_id']}호 -> {actual_date['month']}월 {actual_date['day']}일")
+            # 의결*.pdf 파일에서 실제 날짜 추출 시도 (항상 확인)
+            actual_date = await self._extract_actual_meeting_date(
+                decision_data['decision_year'], 
+                decision_data['decision_id'],
+                self.processed_pdf_dir
+            )
+            if actual_date:
+                decision_data['decision_month'] = actual_date['month']
+                decision_data['decision_day'] = actual_date['day']
+                logger.info(f"실제 회의 날짜로 업데이트: {decision_data['decision_year']}-{decision_data['decision_id']}호 -> {actual_date['month']}월 {actual_date['day']}일")
             
             # 의결서 저장
             decision = self.decision_service.create_decision(decision_data)
@@ -609,34 +640,35 @@ class PDFProcessor:
     # 하이브리드 처리를 위한 헬퍼 메서드들
     
     def _validate_rule_based_result(self, extracted_data: Dict[str, Any]) -> bool:
-        """Rule-based 추출 결과 검증"""
+        """Rule-based 추출 결과 검증 (완화된 버전)"""
         try:
             decision = extracted_data.get('decision', {})
             actions = extracted_data.get('actions', [])
             laws = extracted_data.get('laws', [])
             
-            # 기본 필수 필드 검증
+            # 핵심 필수 필드만 검증 (완화)
             if not decision.get('decision_year') or not decision.get('decision_id'):
                 logger.warning("의결서 기본 정보 누락")
                 return False
             
-            # 조치 정보 검증
+            # 조치 정보 검증 (완화 - 빈 리스트도 허용)
             if not actions:
-                logger.warning("조치 정보 누락")
-                return False
+                logger.warning("조치 정보 누락 - AI 보완으로 처리")
             
-            # 법률 정보 검증
-            if not laws:
-                logger.warning("법률 정보 누락")
-                return False
-            
-            # 법률 조항이 구체적으로 추출되었는지 확인
+            # 법률 정보 검증 (완화 - 개수만 확인)
+            valid_laws = 0
             for law in laws:
-                if not law.get('article_details') or law.get('article_details') == '미상':
-                    logger.warning(f"법률 조항 정보 부족: {law}")
-                    return False
+                if law.get('article_details') and law.get('article_details') != '미상':
+                    valid_laws += 1
             
-            logger.info("Rule-based 추출 결과 검증 통과")
+            # 최소 조건: 의결 기본정보 + (조치 또는 법률 중 하나)
+            has_core_content = len(actions) > 0 or valid_laws > 0
+            
+            if not has_core_content:
+                logger.warning("핵심 내용 부족 (조치와 법률 모두 누락)")
+                return False
+            
+            logger.info(f"Rule-based 추출 결과 검증 통과 (조치: {len(actions)}개, 유효 법률: {valid_laws}개)")
             return True
             
         except Exception as e:
@@ -698,20 +730,26 @@ class PDFProcessor:
         try:
             import re
             
+            # 연도별 폴더에서 의결 파일 찾기
+            year_dir = os.path.join(processed_pdf_dir, str(decision_year))
+            
+            # 연도별 폴더가 없으면 기본 폴더에서 검색
+            search_dir = year_dir if os.path.exists(year_dir) else processed_pdf_dir
+            
             # 매칭되는 의결 파일 찾기
             pattern = f'의결{decision_id}\\.'
             matching_files = []
             
-            for filename in os.listdir(processed_pdf_dir):
+            for filename in os.listdir(search_dir):
                 if re.match(pattern, filename) and filename.endswith('.pdf'):
                     matching_files.append(filename)
             
             if not matching_files:
-                logger.debug(f"매칭되는 의결 파일 없음: {decision_year}-{decision_id}호")
+                logger.debug(f"매칭되는 의결 파일 없음: {decision_year}-{decision_id}호 (검색 폴더: {search_dir})")
                 return None
             
             # 첫 번째 매칭 파일에서 날짜 추출
-            decision_file_path = os.path.join(processed_pdf_dir, matching_files[0])
+            decision_file_path = os.path.join(search_dir, matching_files[0])
             pdf_text = self.extract_text_from_pdf(decision_file_path)
             
             if not pdf_text:

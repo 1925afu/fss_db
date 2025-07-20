@@ -23,7 +23,8 @@ import {
   InfoCircleOutlined,
   CalendarOutlined,
   DollarOutlined,
-  TeamOutlined
+  TeamOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -366,7 +367,7 @@ export default function SearchResults({
             showTotal={(total, range) => 
               `${range[0]}-${range[1]} / 총 ${total}건`
             }
-            onChange={onPageChange}
+            onChange={onPageChange || (() => {})}
           />
         </div>
       )}
@@ -384,9 +385,6 @@ export default function SearchResults({
         footer={[
           <Button key="close" onClick={() => setDetailVisible(false)}>
             닫기
-          </Button>,
-          <Button key="download" type="primary" icon={<DownloadOutlined />}>
-            PDF 다운로드
           </Button>
         ]}
         width={800}
@@ -443,6 +441,15 @@ export default function SearchResults({
                 </Text>
               </Descriptions.Item>
             )}
+            {selectedRecord.violation_summary && (
+              <Descriptions.Item label="AI 요약" span={2}>
+                <Card size="small" className="bg-blue-50">
+                  <Text className="whitespace-pre-wrap">
+                    {selectedRecord.violation_summary}
+                  </Text>
+                </Card>
+              </Descriptions.Item>
+            )}
             {selectedRecord.effective_date && (
               <Descriptions.Item label="시행일" span={1}>
                 <Space>
@@ -451,6 +458,56 @@ export default function SearchResults({
                 </Space>
               </Descriptions.Item>
             )}
+            <Descriptions.Item label="관련 문서" span={2}>
+              <Space direction="vertical" size="middle" className="w-full">
+                {/* 금융위 의결서 */}
+                <div>
+                  <Button 
+                    size="small"
+                    icon={<FileTextOutlined />}
+                    onClick={() => {
+                      const year = selectedRecord.decision_year;
+                      const id = selectedRecord.decision_id;
+                      window.open(`http://localhost:8000/api/v1/decisions/${year}/${id}/download`, '_blank');
+                    }}
+                    type="primary"
+                  >
+                    금융위 의결서 (제{selectedRecord.decision_year}-{selectedRecord.decision_id}호)
+                  </Button>
+                </div>
+                
+                {/* 의결 파일 */}
+                <div>
+                  <Button 
+                    size="small"
+                    icon={<FileTextOutlined />}
+                    onClick={async () => {
+                      const year = selectedRecord.decision_year;
+                      const id = selectedRecord.decision_id;
+                      // 먼저 파일 존재 여부 확인을 위해 시도
+                      try {
+                        const response = await fetch(`http://localhost:8000/api/v1/decisions/${year}/${id}/companion-download`, {
+                          method: 'HEAD'
+                        });
+                        if (response.ok) {
+                          window.open(`http://localhost:8000/api/v1/decisions/${year}/${id}/companion-download`, '_blank');
+                        } else {
+                          // 파일이 없는 경우 아무 동작도 하지 않음
+                          console.log('의결 파일이 없습니다.');
+                        }
+                      } catch (error) {
+                        console.error('파일 확인 중 오류:', error);
+                      }
+                    }}
+                  >
+                    의결{selectedRecord.decision_id}. {selectedRecord.entity_name ? selectedRecord.entity_name : '관련 문서'}
+                  </Button>
+                  <Text type="secondary" className="text-xs ml-2">
+                    (파일이 있는 경우에만 다운로드 가능)
+                  </Text>
+                </div>
+              </Space>
+            </Descriptions.Item>
           </Descriptions>
         )}
       </Modal>
