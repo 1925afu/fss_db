@@ -31,18 +31,27 @@ import type { ColumnsType } from 'antd/es/table';
 const { Title, Text, Paragraph } = Typography;
 
 interface SearchResult {
+  decision_pk?: number;  // V2 primary key
   decision_id: number;
   decision_year: number;
   title: string;
-  category_1: string;
-  category_2: string;
-  stated_purpose: string;
+  category_1?: string;
+  category_2?: string;
+  stated_purpose?: string;
   entity_name?: string;
   industry_sector?: string;
   action_type?: string;
   fine_amount?: number;
   violation_details?: string;
+  violation_summary?: string;
   effective_date?: string;
+  decision_date?: string;
+  decision_month?: number;
+  decision_day?: number;
+  laws?: Array<{
+    law_name: string;
+    article_details?: string;
+  }>;
 }
 
 interface SearchResultsProps {
@@ -187,7 +196,7 @@ export default function SearchResults({
   const CardView = () => (
     <Row gutter={[16, 16]}>
       {results.map((result, index) => (
-        <Col xs={24} sm={12} lg={8} key={index}>
+        <Col xs={24} sm={12} lg={8} key={result.decision_pk ? `pk-${result.decision_pk}` : `${result.decision_year}-${result.decision_id || 'unknown'}-${index}`}>
           <Card
             size="small"
             hoverable
@@ -345,7 +354,7 @@ export default function SearchResults({
           dataSource={results}
           loading={loading}
           pagination={false}
-          rowKey={(record) => `${record.decision_year}-${record.decision_id}`}
+          rowKey={(record) => record.decision_pk ? `pk-${record.decision_pk}` : `${record.decision_year}-${record.decision_id || 'unknown'}-${Math.random()}`}
           size="small"
         />
       </div>
@@ -455,6 +464,22 @@ export default function SearchResults({
                 <Space>
                   <CalendarOutlined />
                   {selectedRecord.effective_date}
+                </Space>
+              </Descriptions.Item>
+            )}
+            {selectedRecord.laws && selectedRecord.laws.length > 0 && (
+              <Descriptions.Item label="근거 법률" span={2}>
+                <Space direction="vertical" size={2} className="w-full">
+                  {selectedRecord.laws.map((law, index) => (
+                    <div key={index}>
+                      <Text strong>{law.law_name}</Text>
+                      {law.article_details && (
+                        <Text type="secondary" className="ml-2">
+                          {law.article_details}
+                        </Text>
+                      )}
+                    </div>
+                  ))}
                 </Space>
               </Descriptions.Item>
             )}

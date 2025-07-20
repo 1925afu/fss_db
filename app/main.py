@@ -32,7 +32,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def startup_event():
     """애플리케이션 시작 시 실행"""
     init_db()
-    print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 서버가 시작되었습니다!")
+    print(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 서버가 시작되었습니다! (V2 API 활성화)")
 
 
 @app.on_event("shutdown")

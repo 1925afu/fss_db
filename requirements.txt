@@ -12,7 +12,7 @@ alembic==1.13.3
 # AI 및 NL2SQL
 langchain==0.3.15
 langchain-google-genai==2.0.7
-google-generativeai==0.8.4
+google-generativeai>=1.0.0
 
 # 웹 크롤링 및 PDF 처리
 requests==2.32.3

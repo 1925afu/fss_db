@@ -139,6 +139,14 @@ This is a PoC system focused on:
 - **API Limitation**: Daily quota reached (250 requests for Gemini free tier)
 
 ### Known Issues
-- **Complex PDFs**: Files 2025-54호 and 2025-94호 timeout due to complexity
-- **Session Management**: SQLite transaction handling requires careful session management
-- **API Rate Limits**: Gemini free tier limits require batch processing strategies
+- **Securities PDFs**: 15 files (64-72, 80, 91-93호) cause JSON parsing errors
+- **API Rate Limits**: Free tier 50 requests/day requires batch strategy
+- **React Warning**: antd v5 compatibility with React 19 (non-critical)
+- **SQL Dialect**: Some generated SQL uses MySQL syntax on SQLite
+
+## Recent V2 System Updates
+- Migrated from V1 to V2 schema with surrogate keys
+- Implemented Gemini Structured Output for reliable extraction
+- Completed full web interface with Next.js + Ant Design
+- Processed 68 out of 83 (81.9%) 2025 FSC decisions
+- Integrated law information display in search results

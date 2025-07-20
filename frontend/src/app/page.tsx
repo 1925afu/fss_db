@@ -14,6 +14,8 @@ export default function Home() {
   const handleSearch = async (query: string, filters?: any) => {
     setSearchQuery(query);
     setLoading(true);
+    // 새로운 검색 시작 시 이전 결과 즉시 초기화
+    setSearchResults([]);
     
     try {
       const { searchService } = await import('@/lib/api');
@@ -34,14 +36,8 @@ export default function Home() {
         });
       }
       
-      // API 응답 구조에 따라 파싱
-      if (response.results && typeof response.results === 'object' && 'results' in response.results) {
-        // 중첩된 results 구조 처리
-        setSearchResults(response.results.results || []);
-      } else {
-        // 단일 results 구조 처리
-        setSearchResults(response.results || []);
-      }
+      // V2 API 응답 구조 처리
+      setSearchResults(response.results || []);
       setLoading(false);
       
     } catch (error: any) {
